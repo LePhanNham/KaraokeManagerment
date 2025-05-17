@@ -18,7 +18,8 @@ import {
   CalendarToday,
   ExitToApp,
   Dashboard,
-  Person
+  Person,
+  BarChart
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,7 +32,8 @@ const Header = () => {
   const menuItems = [
     { text: 'Trang chủ', icon: <Dashboard />, path: '/' },
     { text: 'Đặt phòng', icon: <CalendarToday />, path: '/bookings' },
-    { text: 'Quản lý phòng', icon: <MeetingRoom />, path: '/rooms' }
+    { text: 'Quản lý phòng', icon: <MeetingRoom />, path: '/rooms' },
+    { text: 'Thống kê', icon: <BarChart />, path: '/reports' }
   ];
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -117,6 +119,15 @@ const Header = () => {
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
           >
+            <MenuItem 
+              onClick={() => {
+                navigate('/profile');
+                handleClose();
+              }}
+            >
+              <Person sx={{ mr: 1 }} />
+              Thông tin cá nhân
+            </MenuItem>
             {isMobile && menuItems.map((item) => (
               <MenuItem 
                 key={item.text}

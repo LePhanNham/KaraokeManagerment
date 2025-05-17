@@ -1,6 +1,6 @@
 import api from './api';
-import { Room } from '../types';
-import { ApiResponse } from '../types/api';
+import { Room } from '../types/interfaces';
+import { ApiResponse } from '../types/interfaces';
 
 export const roomService = {
   getAllRooms: async (): Promise<ApiResponse<Room[]>> => {
@@ -39,9 +39,19 @@ export const roomService = {
     try {
       const response = await api.delete<ApiResponse<void>>(`/rooms/${id}`);
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting room:', error);
-      throw error;
+      // Return a structured error response instead of throwing
+      if (error.response && error.response.data) {
+        // Return the server's error response
+        return error.response.data;
+      }
+      // If no structured response, create a generic error response
+      return {
+        success: false,
+        message: error.message || 'Failed to delete room',
+        data: undefined
+      };
     }
   }
 };

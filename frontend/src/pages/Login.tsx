@@ -11,12 +11,16 @@ import {
   Alert
 } from '@mui/material';
 import { AccountCircle, Lock } from '@mui/icons-material';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { authApi } from '../services/auth';
-import { LoginCredentials } from '../types/auth';
+import { useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { LoginCredentials } from '../types/interfaces';
+import { authApi } from 'services/auth';
 
 const Login = () => {
+  const location = useLocation();
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const from = location.state?.from || '/';
   const [formData, setFormData] = useState<LoginCredentials>({
     username: '',
     password: ''
@@ -61,9 +65,10 @@ const Login = () => {
     setError('');
     
     try {
-      await authApi.login(formData);
+      await login(formData.username, formData.password);
       setSuccess(true);
-      setTimeout(() => navigate('/'), 1000);
+      // Navigate to the page the user was trying to access
+      setTimeout(() => navigate(from), 1000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.');
     } finally {

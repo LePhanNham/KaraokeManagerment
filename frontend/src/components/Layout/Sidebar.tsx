@@ -1,94 +1,90 @@
 import React from 'react';
-import {
+import { 
   Drawer,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
-  ListItemButton,
+  Toolbar,
   useTheme,
+  useMediaQuery,
   Divider,
   Box
 } from '@mui/material';
-import {
+import { 
   Dashboard,
-  MeetingRoom,
   CalendarToday,
+  MeetingRoom,
+  BarChart,
   Settings
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
-
-const DRAWER_WIDTH = 240;
-
-const menuItems = [
-  { text: 'Trang chủ', icon: <Dashboard />, path: '/' },
-  { text: 'Đặt phòng', icon: <CalendarToday />, path: '/bookings' },
-  { text: 'Quản lý phòng', icon: <MeetingRoom />, path: '/rooms' },
-  { text: 'Cài đặt', icon: <Settings />, path: '/settings' }
-];
 
 const Sidebar = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  const drawerWidth = 240;
+
+  const menuItems = [
+    { text: 'Trang chủ', icon: <Dashboard />, path: '/' },
+    { text: 'Đặt phòng', icon: <CalendarToday />, path: '/bookings' },
+    { text: 'Quản lý phòng', icon: <MeetingRoom />, path: '/rooms' },
+    { text: 'Thống kê', icon: <BarChart />, path: '/reports' },
+    { text: 'Cài đặt', icon: <Settings />, path: '/settings' }
+  ];
+
+  const isActive = (path: string) => {
+    return location.pathname === path;
+  };
 
   return (
     <Drawer
       variant="permanent"
       sx={{
-        width: DRAWER_WIDTH,
+        width: drawerWidth,
         flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          width: DRAWER_WIDTH,
+        [`& .MuiDrawer-paper`]: { 
+          width: drawerWidth, 
           boxSizing: 'border-box',
           backgroundColor: theme.palette.background.paper,
-          borderRight: `1px solid ${theme.palette.divider}`,
-          mt: '64px'
-        }
+          borderRight: `1px solid ${theme.palette.divider}`
+        },
+        display: { xs: 'none', md: 'block' }
       }}
     >
-      <Box sx={{ overflow: 'auto' }}>
+      <Toolbar /> {/* This creates space for the AppBar */}
+      <Box sx={{ overflow: 'auto', mt: 2 }}>
         <List>
           {menuItems.map((item) => (
             <ListItem 
-              key={item.text} 
-              disablePadding
-              sx={{ display: 'block' }}
+              button 
+              key={item.text}
+              onClick={() => navigate(item.path)}
+              sx={{
+                backgroundColor: isActive(item.path) ? theme.palette.action.selected : 'transparent',
+                borderRadius: 1,
+                mb: 0.5,
+                mx: 1,
+                '&:hover': {
+                  backgroundColor: theme.palette.action.hover,
+                }
+              }}
             >
-              <ListItemButton
-                selected={location.pathname === item.path}
-                onClick={() => navigate(item.path)}
-                sx={{
-                  minHeight: 48,
-                  px: 2.5,
-                  '&.Mui-selected': {
-                    backgroundColor: theme.palette.action.selected,
-                    '&:hover': {
-                      backgroundColor: theme.palette.action.selected
-                    }
-                  }
+              <ListItemIcon sx={{ 
+                color: isActive(item.path) ? theme.palette.primary.main : theme.palette.text.secondary 
+              }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText 
+                primary={item.text} 
+                primaryTypographyProps={{
+                  fontWeight: isActive(item.path) ? 'bold' : 'normal',
+                  color: isActive(item.path) ? theme.palette.primary.main : theme.palette.text.primary
                 }}
-              >
-                <ListItemIcon
-                  sx={{
-                    minWidth: 0,
-                    mr: 2,
-                    color: location.pathname === item.path 
-                      ? theme.palette.primary.main 
-                      : theme.palette.text.secondary
-                  }}
-                >
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText 
-                  primary={item.text}
-                  sx={{
-                    color: location.pathname === item.path 
-                      ? theme.palette.primary.main 
-                      : theme.palette.text.primary
-                  }}
-                />
-              </ListItemButton>
+              />
             </ListItem>
           ))}
         </List>

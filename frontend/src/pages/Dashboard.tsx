@@ -13,36 +13,76 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   Chip,
-  Divider
+  Divider,
+  Button
 } from '@mui/material';
 import {
   MeetingRoom as RoomIcon,
   Person as PersonIcon,
   AttachMoney as MoneyIcon,
 } from '@mui/icons-material';
-import { Room } from '../types';
+import { Booking, Room } from '../types/interfaces';
 import { roomService } from '../services/roomService';
-
+import { reportService } from '../services/reportService';
+import { useNavigate } from 'react-router-dom';
+import { bookingService } from 'services/bookingService';
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [stats, setStats] = useState({
     availableRooms: 0,
     totalCustomers: 0,
     todayRevenue: 0
   });
 
+  const handleViewReports = () => {
+    navigate('/reports');
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await roomService.getAllRooms();
-        if (response.success) {
-          setRooms(response.data);
-          // Calculate stats
+        setLoading(true);
+        
+        // Get room data
+        const roomResponse = await roomService.getAllRooms();
+        
+        // Get booking data to determine room status
+        const bookingsResponse = await bookingService.getAllBookings();
+        
+        // Get current month's revenue data
+        const currentYear = new Date().getFullYear();
+        const revenueResponse = await reportService.getMonthlyRevenue(currentYear);
+        
+        // Calculate today's stats from the monthly data
+        const currentMonth = new Date().getMonth() + 1; // JavaScript months are 0-indexed
+        const currentMonthData = revenueResponse.success ? 
+          revenueResponse.data.find(item => item.period === currentMonth) : null;
+        
+        if (roomResponse.success && bookingsResponse.success) {
+          setRooms(roomResponse.data);
+          setBookings(bookingsResponse.data);
+          
+          // Find active bookings (confirmed bookings where current time is between start and end)
+          const now = new Date();
+          const activeBookings = bookingsResponse.data.filter((booking: Booking) => 
+            booking.status === 'confirmed' && 
+            new Date(booking.start_time) <= now && 
+            new Date(booking.end_time) > now
+          );
+          
+          // Count available rooms (those without active bookings)
+          const occupiedRoomIds = activeBookings.map((booking: Booking) => booking.room_id);
+          const availableRoomsCount = roomResponse.data.filter(
+            room => room.id !== undefined && !occupiedRoomIds.includes(room.id)
+          ).length;
+          
           setStats({
-            availableRooms: response.data.filter(room => room.status === 'available').length,
-            totalCustomers: 24, // This should come from API
-            todayRevenue: 2500000 // This should come from API
+            availableRooms: availableRoomsCount,
+            totalCustomers: currentMonthData ? currentMonthData.bookings_count : 0,
+            todayRevenue: currentMonthData ? currentMonthData.total_revenue / 30 : 0 // Rough estimate for daily revenue
           });
         }
       } catch (error) {
@@ -55,17 +95,21 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'available':
-        return 'success';
-      case 'occupied':
-        return 'error';
-      case 'maintenance':
-        return 'warning';
-      default:
-        return 'default';
-    }
+  const isRoomOccupied = (roomId: number | undefined) => {
+    if (!roomId) return false;
+    
+    // Check if there's an active booking for this room
+    const now = new Date();
+    return bookings.some((booking: Booking) => 
+      booking.room_id === roomId && 
+      booking.status === 'confirmed' && 
+      new Date(booking.start_time) <= now && 
+      new Date(booking.end_time) > now
+    );
+  };
+
+  const getStatusColor = (roomId: number | undefined) => {
+    return isRoomOccupied(roomId) ? 'error' : 'success';
   };
 
   const formatCurrency = (amount: number) => {
@@ -84,10 +128,17 @@ const Dashboard = () => {
   }
 
   return (
-    <Container sx={{ py: 3 }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
-        Bảng điều khiển
-      </Typography>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+        <Typography variant="h4">Dashboard</Typography>
+        <Button 
+          variant="contained" 
+          color="primary" 
+          onClick={handleViewReports}
+        >
+          Xem thống kê
+        </Button>
+      </Box>
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={4}>
@@ -134,25 +185,28 @@ const Dashboard = () => {
           Danh sách phòng
         </Typography>
         <List>
-          {rooms.map((room, index) => (
-            <React.Fragment key={room.id}>
-              <ListItem>
-                <ListItemText
-                  primary={room.name}
-                  secondary={`${room.type} - ${formatCurrency(room.price_per_hour)}/giờ`}
-                />
-                <ListItemSecondaryAction>
-                  <Chip
-                    label={room.status === 'available' ? 'Trống' : 
-                           room.status === 'occupied' ? 'Đang sử dụng' : 'Bảo trì'}
-                    color={getStatusColor(room.status)}
-                    size="small"
+          {rooms.map((room, index) => {
+            const occupied = isRoomOccupied(room.id);
+            
+            return (
+              <React.Fragment key={room.id}>
+                <ListItem>
+                  <ListItemText
+                    primary={room.name}
+                    secondary={`${room.type} - ${formatCurrency(room.price_per_hour)}/giờ`}
                   />
-                </ListItemSecondaryAction>
-              </ListItem>
-              {index < rooms.length - 1 && <Divider />}
-            </React.Fragment>
-          ))}
+                  <ListItemSecondaryAction>
+                    <Chip
+                      label={occupied ? 'Đang sử dụng' : 'Trống'}
+                      color={occupied ? 'error' : 'success'}
+                      size="small"
+                    />
+                  </ListItemSecondaryAction>
+                </ListItem>
+                {index < rooms.length - 1 && <Divider />}
+              </React.Fragment>
+            );
+          })}
         </List>
       </Paper>
     </Container>

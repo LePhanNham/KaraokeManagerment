@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout/Layout';
 import Login from './pages/Login';
@@ -8,14 +8,29 @@ import Dashboard from './pages/Dashboard';
 import Bookings from './pages/Bookings';
 import Rooms from './pages/Rooms';
 import Profile from './pages/Profile';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
 }
 
 const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+  const { isAuthenticated, checkAuth } = useAuth();
+  const location = useLocation();
+  
+  // Check authentication when component mounts or location changes
+  useEffect(() => {
+    const isAuth = checkAuth();
+    if (!isAuth) {
+      // checkAuth already handles redirection
+      return;
+    }
+  }, [checkAuth, location]);
+  
+  // If authenticated, render children, otherwise the checkAuth function
+  // will handle the redirection to login
+  return isAuthenticated ? <>{children}</> : null;
 };
 
 const AppRoutes = () => {
@@ -40,8 +55,10 @@ const AppRoutes = () => {
                 <Route path="/rooms/new" element={<Rooms />} />
                 <Route path="/rooms/:id" element={<Rooms />} />
                 
-                <Route path="/profile" element={<Profile />} />
+                <Route path="/reports" element={<Reports />} />
                 
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
@@ -54,11 +71,11 @@ const AppRoutes = () => {
 
 const App = () => {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
         <AppRoutes />
-      </BrowserRouter>
-    </AuthProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 };
 

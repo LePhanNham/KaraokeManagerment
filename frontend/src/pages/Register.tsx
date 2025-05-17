@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { authApi } from '../services/auth';
-import { RegisterCredentials } from '../types/auth';
+import { RegisterCredentials } from '../types/interfaces';
 
 const Register = () => {
   const navigate = useNavigate();
