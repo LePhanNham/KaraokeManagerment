@@ -48,18 +48,19 @@ export interface AuthResponse {
 // booking services
 
 export interface Booking {
-  id: number;
+  id?: number;
   room_id: number;
   customer_id: number;
+  booking_group_id?: number;
   start_time: string;
   end_time: string;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   total_amount: number;
-  notes: string;
-  created_at: string;
-  updated_at: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  room?: Room; // Thêm để hiển thị thông tin phòng
 }
-
 
 export type BookingInput = {
   room_id: number;
@@ -74,7 +75,36 @@ export type BookingInput = {
 export interface BookingWithRoom extends Booking {
   roomName?: string;
   roomType?: string;
+  roomCapacity?: number;
+  roomPrice?: number;
+  price_per_hour?: number; // Thêm trường này
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  room?: Room; // Thông tin phòng đầy đủ
 }
+
+// Thêm interface cho BookingGroup
+export interface BookingGroup {
+  id?: number;
+  customer_id: number;
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  total_amount: number;
+  payment_status: 'unpaid' | 'partially_paid' | 'paid';
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Interface cho response khi đặt nhiều phòng
+export interface MultipleBookingResponse {
+  success: boolean;
+  data: {
+    booking_group: BookingGroup;
+    bookings: Booking[];
+  };
+  message: string;
+}
+
 
 //room services 
 export interface Room {

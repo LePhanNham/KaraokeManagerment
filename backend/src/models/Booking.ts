@@ -7,6 +7,11 @@ export interface Booking {
     notes?: string;
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
     total_amount?: number;
+    booking_group_id?: number;
+    payment_method?: 'cash' | 'card' | 'transfer' | 'e-wallet';
+    payment_notes?: string;
+    checkout_time?: Date;
+    late_checkout_fee?: number;
     created_at?: Date;
     updated_at?: Date;
 }

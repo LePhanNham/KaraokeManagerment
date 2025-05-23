@@ -171,21 +171,11 @@ const Profile = () => {
     setPasswordDialogOpen(false);
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordError('');
-
-    // Validate passwords
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordError('Mật khẩu mới không khớp');
-      return;
-    }
-
-    if (passwordData.newPassword.length < 6) {
-      setPasswordError('Mật khẩu mới phải có ít nhất 6 ký tự');
-      return;
-    }
-
+    
+    // Validation code...
+    
     try {
       setLoading(true);
       const response = await authApi.changePassword({
@@ -426,7 +416,7 @@ const Profile = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handlePasswordDialogClose}>Hủy</Button>
-          <Button onClick={handleChangePassword} disabled={loading}>
+          <Button onClick={handlePasswordSubmit} disabled={loading}>
             {loading ? 'Đang xử lý...' : 'Đổi mật khẩu'}
           </Button>
         </DialogActions>

@@ -1,9 +1,11 @@
-import { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import { Pool, RowDataPacket, ResultSetHeader, PoolConnection } from 'mysql2/promise';
 import { Booking } from '../models/Booking';
-import { Room } from '../models/Room';  // Import Room interface
+import { Room } from '../models/Room';
+import { BookingGroup } from '../models/BookingGroup';
 import database from '../config/database';
 
 interface BookingRow extends RowDataPacket, Booking {}
+interface BookingGroupRow extends RowDataPacket, BookingGroup {}
 
 class BookingService {
     private db: Pool;
@@ -100,39 +102,64 @@ class BookingService {
         }
     }
 
-    async updateBooking(id: number, updateData: Partial<Booking>): Promise<Booking> {
+    async updateBooking(id: number, bookingData: Partial<Booking>): Promise<Booking> {
         try {
-            // Xử lý định dạng ngày tháng nếu có
-            if (updateData.start_time instanceof Date) {
-                updateData.start_time = this.formatDateForMySQL(updateData.start_time) as any;
+            console.log(`Updating booking ${id} with data:`, bookingData);
+            
+            // Chuẩn bị các cặp key-value cho câu lệnh UPDATE
+            const updateFields: string[] = [];
+            const updateValues: any[] = [];
+            
+            for (const [key, value] of Object.entries(bookingData)) {
+                if (value !== undefined) {
+                    // Xử lý đặc biệt cho các trường ngày tháng
+                    if (key === 'start_time' || key === 'end_time') {
+                        if (value instanceof Date) {
+                            updateFields.push(`${key} = ?`);
+                            updateValues.push(this.formatDateForMySQL(value));
+                        } else if (typeof value === 'string') {
+                            updateFields.push(`${key} = ?`);
+                            updateValues.push(value);
+                        }
+                    } else {
+                        updateFields.push(`${key} = ?`);
+                        updateValues.push(value);
+                    }
+                }
             }
             
-            if (updateData.end_time instanceof Date) {
-                updateData.end_time = this.formatDateForMySQL(updateData.end_time) as any;
-            } else if (typeof updateData.end_time === 'string' && (updateData.end_time as string).indexOf('Z') !== -1) {
-                // Xử lý chuỗi ISO datetime với múi giờ
-                updateData.end_time = this.formatDateForMySQL(new Date(updateData.end_time)) as any;
-            }
+            // Thêm ID vào cuối mảng giá trị
+            updateValues.push(id);
             
-            const setClause = Object.keys(updateData)
-                .map(key => `${key} = ?`)
-                .join(', ');
+            // Log SQL query để debug
+            const sqlQuery = `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`;
+            console.log('SQL Query:', sqlQuery);
+            console.log('SQL Query params:', updateValues);
             
-            await this.db.execute(
-                `UPDATE bookings SET ${setClause} WHERE id = ?`,
-                [...Object.values(updateData), id]
+            // Thực hiện câu lệnh UPDATE
+            const [result] = await this.db.execute<ResultSetHeader>(
+                sqlQuery,
+                updateValues
             );
-
-            const booking = await this.getBookingById(id);
-            if (!booking) {
-                throw new Error('Booking not found after update');
+            
+            console.log(`Update result for booking ${id}:`, result);
+            
+            if (result.affectedRows === 0) {
+                throw new Error(`Booking with id ${id} not found`);
             }
-            return booking;
+            
+            // Lấy booking đã cập nhật
+            const [rows] = await this.db.execute<BookingRow[]>(
+                'SELECT * FROM bookings WHERE id = ?',
+                [id]
+            );
+            
+            console.log(`Retrieved updated booking ${id}:`, rows[0]);
+            
+            return rows[0];
         } catch (error) {
-            if (error instanceof Error) {
-                throw new Error(`Failed to update booking: ${error.message}`);
-            }
-            throw new Error('Failed to update booking: Unknown error');
+            console.error(`Error updating booking ${id}:`, error);
+            throw error;
         }
     }
 
@@ -192,48 +219,68 @@ class BookingService {
         }
     }
 
-    async findAvailableRooms(
-        startTime: Date, 
-        endTime: Date,
-    ) {
+    async findAvailableRooms(startTime: Date, endTime: Date): Promise<Room[]> {
         try {
-            let query = `
-                SELECT r.* 
-                FROM rooms r
-                WHERE r.id NOT IN (
-                    SELECT b.room_id
-                    FROM bookings b
-                    WHERE b.status IN ('pending', 'confirmed')
-                    AND (
-                        (b.start_time < ? AND b.end_time > ?)
-                        OR (b.start_time < ? AND b.end_time > ?)
-                        OR (b.start_time >= ? AND b.end_time <= ?)
-                    )
-                )
-                ORDER BY r.price_per_hour ASC, r.name ASC
-            `;
-            
-            const queryParams: (Date | string | number)[] = [
-                endTime, startTime,
-                endTime, startTime,
-                startTime, endTime
-            ];
+            console.log('Finding available rooms between:', {
+                startTime: startTime.toISOString(),
+                endTime: endTime.toISOString()
+            });
 
-            const [rows] = await this.db.execute(query, queryParams);
+            // Kiểm tra tính hợp lệ của thời gian
+            if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+                throw new Error('Thời gian không hợp lệ');
+            }
 
-            return (rows as any[]).map(row => ({
-                id: row.id,
-                name: row.name,
-                type: row.type,
-                price_per_hour: Number(row.price_per_hour),
-                capacity: Number(row.capacity),
-                created_at: row.created_at ? new Date(row.created_at) : undefined,
-                updated_at: row.updated_at ? new Date(row.updated_at) : undefined
-            }));
+            if (startTime >= endTime) {
+                throw new Error('Thời gian bắt đầu phải trước thời gian kết thúc');
+            }
 
+            // Format dates for MySQL
+            const formattedStartTime = this.formatDateForMySQL(startTime);
+            const formattedEndTime = this.formatDateForMySQL(endTime);
+
+            console.log('Formatted dates for MySQL:', {
+                formattedStartTime,
+                formattedEndTime
+            });
+
+            // Lấy danh sách tất cả các phòng
+            const [allRooms] = await this.db.execute<RowDataPacket[]>(
+                'SELECT * FROM rooms ORDER BY name'
+            );
+
+            console.log(`Found ${allRooms.length} total rooms`);
+
+            // Lấy danh sách các phòng đã được đặt trong khoảng thời gian
+            const [bookedRooms] = await this.db.execute<RowDataPacket[]>(
+                `SELECT DISTINCT room_id FROM bookings 
+                 WHERE (status = 'pending' OR status = 'confirmed') 
+                 AND (
+                     (start_time <= ? AND end_time > ?) OR
+                     (start_time < ? AND end_time >= ?) OR
+                     (start_time >= ? AND end_time <= ?)
+                 )`,
+                [
+                    formattedEndTime, formattedStartTime,
+                    formattedEndTime, formattedStartTime,
+                    formattedStartTime, formattedEndTime
+                ]
+            );
+
+            console.log(`Found ${bookedRooms.length} booked rooms in the time range`);
+
+            // Tạo một Set các ID phòng đã đặt
+            const bookedRoomIds = new Set(bookedRooms.map(room => room.room_id));
+
+            // Lọc ra các phòng còn trống
+            const availableRooms = allRooms.filter(room => !bookedRoomIds.has(room.id));
+
+            console.log(`Found ${availableRooms.length} available rooms`);
+
+            return availableRooms as Room[];
         } catch (error) {
             console.error('Error finding available rooms:', error);
-            throw new Error('Failed to find available rooms');
+            throw error;
         }
     }
 
@@ -351,11 +398,174 @@ class BookingService {
             
             // Update the booking
             const updatedBooking = await this.updateBooking(id, updateData);
-            
+            if (!updatedBooking) {
+                throw new Error('Failed to update booking');
+            }
             return updatedBooking;
         } catch (error) {
             console.error('Error completing booking:', error);
             throw error;
+        }
+    }
+
+    async createBookingGroup(groupData: Partial<BookingGroup>): Promise<BookingGroup> {
+        try {
+            const [result] = await this.db.execute<ResultSetHeader>(
+                'INSERT INTO booking_groups (customer_id, status, created_at) VALUES (?, ?, NOW())',
+                [groupData.customer_id, groupData.status || 'pending']
+            );
+            
+            const groupId = result.insertId;
+            
+            const [rows] = await this.db.execute<RowDataPacket[]>(
+                'SELECT * FROM booking_groups WHERE id = ?',
+                [groupId]
+            );
+            
+            return rows[0] as BookingGroup;
+        } catch (error) {
+            console.error('Error creating booking group:', error);
+            throw error;
+        }
+    }
+
+    async createMultipleBookings(
+        bookingGroupId: number,
+        bookingsData: Partial<Booking>[]
+    ): Promise<Booking[]> {
+        try {
+            const createdBookings: Booking[] = [];
+            
+            // Tạo từng booking một và thêm vào group
+            for (const bookingData of bookingsData) {
+                // Thêm booking_group_id vào dữ liệu
+                const bookingWithGroup = {
+                    ...bookingData,
+                    booking_group_id: bookingGroupId
+                };
+                
+                // Tạo booking
+                const booking = await this.createBooking(bookingWithGroup);
+                createdBookings.push(booking);
+            }
+            
+            return createdBookings;
+        } catch (error) {
+            console.error('Error creating multiple bookings:', error);
+            throw error;
+        }
+    }
+
+    async updateBookingGroupStatus(groupId: number, status: string): Promise<BookingGroup> {
+        let connection: PoolConnection | null = null;
+        try {
+            connection = await this.db.getConnection();
+            await connection.beginTransaction();
+
+            await connection.execute(
+                'UPDATE booking_groups SET status = ? WHERE id = ?',
+                [status, groupId]
+            );
+            
+            // Also update all bookings in the group
+            await connection.execute(
+                'UPDATE bookings SET status = ? WHERE booking_group_id = ?',
+                [status, groupId]
+            );
+            
+            // Return updated booking group
+            const [rows] = await connection.execute<BookingGroupRow[]>(
+                'SELECT * FROM booking_groups WHERE id = ?',
+                [groupId]
+            );
+            
+            await connection.commit();
+            return rows[0];
+        } catch (error) {
+            if (connection) await connection.rollback();
+            console.error('Error updating booking group status:', error);
+            throw error;
+        } finally {
+            if (connection) connection.release();
+        }
+    }
+
+    async getBookingGroup(groupId: number): Promise<BookingGroup | null> {
+        try {
+            const [rows] = await this.db.execute<BookingGroupRow[]>(
+                'SELECT * FROM booking_groups WHERE id = ?',
+                [groupId]
+            );
+            return rows[0] || null;
+        } catch (error) {
+            console.error('Error getting booking group:', error);
+            throw error;
+        }
+    }
+
+    async getBookingsByGroup(groupId: number): Promise<Booking[]> {
+        try {
+            const [rows] = await this.db.execute<BookingRow[]>(
+                'SELECT * FROM bookings WHERE booking_group_id = ?',
+                [groupId]
+            );
+            return rows;
+        } catch (error) {
+            console.error('Error getting bookings by group:', error);
+            throw error;
+        }
+    }
+
+    async completeBookingGroup(groupId: number, endTime?: Date): Promise<BookingGroup> {
+        let connection: PoolConnection | null = null;
+        try {
+            connection = await this.db.getConnection();
+            await connection.beginTransaction();
+
+            // Update booking group status
+            await connection.execute(
+                'UPDATE booking_groups SET status = ? WHERE id = ?',
+                ['completed', groupId]
+            );
+            
+            // Get all bookings in the group
+            const [bookings] = await connection.execute<BookingRow[]>(
+                'SELECT * FROM bookings WHERE booking_group_id = ?',
+                [groupId]
+            );
+            
+            // Update each booking
+            for (const booking of bookings) {
+                const updateData: any = { status: 'completed' };
+                
+                if (endTime) {
+                    updateData.end_time = this.formatDateForMySQL(endTime);
+                }
+                
+                await connection.execute(
+                    'UPDATE bookings SET status = ?, end_time = ? WHERE id = ?',
+                    [
+                        'completed',
+                        endTime ? this.formatDateForMySQL(endTime) : booking.end_time,
+                        booking.id
+                    ]
+                );
+            }
+            
+            // Get updated booking group
+            const [rows] = await connection.execute<BookingGroupRow[]>(
+                'SELECT * FROM booking_groups WHERE id = ?',
+                [groupId]
+            );
+            
+            await connection.commit();
+            return rows[0];
+        } catch (error) {
+            if (connection) await connection.rollback();
+            console.error('Error completing booking group:', error);
+            throw error;
+        } finally {
+            if (connection) connection.release();
         }
     }
 }

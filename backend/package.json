@@ -2,9 +2,9 @@
   "name": "karaoke-management",
   "version": "1.0.0",
   "description": "A Node.js web service for managing karaoke rooms and bookings.",
-  "main": "src/app.ts",
+  "main": "src/server.ts",
   "scripts": {
-    "start": "ts-node src/app.ts",
+    "start": "ts-node src/server.ts",
     "build": "tsc",
     "test": "jest"
   },

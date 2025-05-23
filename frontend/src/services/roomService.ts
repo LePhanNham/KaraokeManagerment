@@ -53,5 +53,15 @@ export const roomService = {
         data: undefined
       };
     }
+  },
+
+  getRoomById: async (id: number): Promise<ApiResponse<Room>> => {
+    try {
+      const response = await api.get<ApiResponse<Room>>(`/rooms/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting room:', error);
+      throw error;
+    }
   }
 };

@@ -29,6 +29,7 @@ class ReportService {
                 WHERE 
                     YEAR(start_time) = ? 
                     AND status IN ('completed', 'confirmed')
+                    AND EXISTS (SELECT 1 FROM payments WHERE payments.booking_id = bookings.id)
                 GROUP BY MONTH(start_time)
                 ORDER BY MONTH(start_time)
             `;
@@ -63,6 +64,7 @@ class ReportService {
                 WHERE 
                     YEAR(start_time) = ? 
                     AND status IN ('completed', 'confirmed')
+                    AND EXISTS (SELECT 1 FROM payments WHERE payments.booking_id = bookings.id)
                 GROUP BY QUARTER(start_time)
                 ORDER BY QUARTER(start_time)
             `;
@@ -97,6 +99,7 @@ class ReportService {
                 WHERE 
                     YEAR(start_time) BETWEEN ? AND ?
                     AND status IN ('completed', 'confirmed')
+                    AND EXISTS (SELECT 1 FROM payments WHERE payments.booking_id = bookings.id)
                 GROUP BY YEAR(start_time)
                 ORDER BY YEAR(start_time)
             `;
@@ -133,7 +136,9 @@ class ReportService {
                     COUNT(b.id) as booking_count,
                     SUM(IFNULL(b.total_amount, 0)) as total_revenue
                 FROM rooms r
-                LEFT JOIN bookings b ON b.room_id = r.id AND YEAR(b.start_time) = ? AND b.status IN ('completed', 'confirmed')
+                LEFT JOIN bookings b ON b.room_id = r.id AND YEAR(b.start_time) = ? 
+                    AND b.status IN ('completed', 'confirmed')
+                    AND EXISTS (SELECT 1 FROM payments WHERE payments.booking_id = b.id)
                 GROUP BY r.id
                 ORDER BY total_revenue DESC
                 LIMIT ${limitValue}

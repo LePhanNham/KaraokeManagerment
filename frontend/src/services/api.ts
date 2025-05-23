@@ -1,47 +1,53 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3000/api',
+  baseURL: 'http://localhost:3000/api',
+  timeout: 10000,
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
   }
 });
 
-// Add a request interceptor to attach the auth token to every request
+// Add request interceptor to include auth token
 api.interceptors.request.use(
   config => {
     // Get token from localStorage
     const token = localStorage.getItem('token');
     
+    // If token exists, add it to the headers
     if (token) {
-      config.headers = {
-        ...config.headers,
-        Authorization: `Bearer ${token}`
-      };
+      // Fix TypeScript error by ensuring headers exists
+      if (!config.headers) {
+        config.headers = {};
+      }
+      config.headers.Authorization = `Bearer ${token}`;
     }
     
+    console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, config.params || config.data);
     return config;
   },
   error => {
+    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );
 
-// Add a response interceptor to handle authentication errors
+// Add response interceptor for debugging
 api.interceptors.response.use(
-  response => response,
+  response => {
+    console.log(`API Response: ${response.status}`, response.data);
+    return response;
+  },
   error => {
-    // If we get a 401 Unauthorized error
+    console.error('API Response Error:', error.response?.data || error.message);
+    
+    // Handle 401 errors (unauthorized)
     if (error.response && error.response.status === 401) {
-      // Clear authentication data
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      
-      // Redirect to login page if not already there
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+      console.log('Authentication error - redirecting to login');
+      // Optional: Redirect to login page
+      // window.location.href = '/login';
     }
+    
     return Promise.reject(error);
   }
 );

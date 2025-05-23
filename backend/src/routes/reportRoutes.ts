@@ -2,23 +2,33 @@ import express from 'express';
 import ReportController from '../controllers/reportController';
 
 const router = express.Router();
-const reportController = new ReportController();
 
+// Thêm route test không cần auth để kiểm tra
 router.get('/test', (req, res) => {
   res.json({ message: 'Report routes are working!' });
 });
 
+// Tạo một factory function để khởi tạo controller khi cần
+const getController = () => {
+  const controller = new ReportController();
+  return controller;
+};
 
-// Thống kê doanh thu theo tháng
-router.get('/revenue/monthly', reportController.getRevenueByMonth.bind(reportController));
+// Sử dụng factory function trong route handlers
+router.get('/revenue/monthly', (req, res) => {
+  getController().getRevenueByMonth(req, res);
+});
 
-// Thống kê doanh thu theo quý
-router.get('/revenue/quarterly', reportController.getRevenueByQuarter.bind(reportController));
+router.get('/revenue/quarterly', (req, res) => {
+  getController().getRevenueByQuarter(req, res);
+});
 
-// Thống kê doanh thu theo năm
-router.get('/revenue/yearly', reportController.getRevenueByYear.bind(reportController));
+router.get('/revenue/yearly', (req, res) => {
+  getController().getRevenueByYear(req, res);
+});
 
-// Thống kê top phòng được sử dụng nhiều nhất
-router.get('/rooms/top', reportController.getTopRooms.bind(reportController));
+router.get('/rooms/top', (req, res) => {
+  getController().getTopRooms(req, res);
+});
 
 export default router;

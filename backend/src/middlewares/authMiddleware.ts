@@ -11,7 +11,8 @@ export interface AuthRequest extends Request {
     }
 }
 
-const customerService = new CustomerService();
+// Không khởi tạo customerService ở đây
+// const customerService = new CustomerService();
 
 export const auth = async (req: Request, res: Response, next: NextFunction) => {
     try {

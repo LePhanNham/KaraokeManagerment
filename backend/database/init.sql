@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS rooms (
     type VARCHAR(50),
     price_per_hour DECIMAL(10, 2) NOT NULL,
     capacity INT NOT NULL,
-    status ENUM('available', 'occupied', 'maintenance') DEFAULT 'available',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -52,6 +51,41 @@ CREATE INDEX idx_booking_dates ON bookings(start_time, end_time);
 -- Thêm index để tối ưu truy vấn thống kê
 CREATE INDEX idx_bookings_start_time ON bookings(start_time);
 CREATE INDEX idx_bookings_status ON bookings(status);
+
+-- Tạo bảng booking_groups để quản lý các booking cùng nhóm
+CREATE TABLE IF NOT EXISTS booking_groups (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    status ENUM('pending', 'confirmed', 'completed', 'cancelled') DEFAULT 'pending',
+    total_amount DECIMAL(10, 2) DEFAULT 0,
+    payment_status ENUM('unpaid', 'partially_paid', 'paid') DEFAULT 'unpaid',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+);
+
+-- Thêm cột booking_group_id vào bảng bookings
+ALTER TABLE bookings ADD COLUMN booking_group_id INT NULL;
+ALTER TABLE bookings ADD CONSTRAINT fk_booking_group FOREIGN KEY (booking_group_id) REFERENCES booking_groups(id);
+
+-- Tạo bảng payments để theo dõi các khoản thanh toán
+CREATE TABLE IF NOT EXISTS payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    booking_id INT NULL,
+    booking_group_id INT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    payment_method ENUM('cash', 'card', 'transfer') NOT NULL,
+    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    FOREIGN KEY (booking_id) REFERENCES bookings(id),
+    FOREIGN KEY (booking_group_id) REFERENCES booking_groups(id),
+    CHECK (booking_id IS NOT NULL OR booking_group_id IS NOT NULL)
+);
+
+-- Tạo index để tối ưu truy vấn
+CREATE INDEX idx_booking_group_id ON bookings(booking_group_id);
+CREATE INDEX idx_booking_groups_status ON booking_groups(status);
+CREATE INDEX idx_booking_groups_payment ON booking_groups(payment_status);
 
 -- Insert sample customers
 INSERT INTO customers (username, password, name, email, phone_number, role) VALUES

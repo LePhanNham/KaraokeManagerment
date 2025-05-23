@@ -52,48 +52,48 @@ const Register = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
-
     setLoading(true);
     setError('');
-
+    
     try {
-        const sanitizedData = {
-            username: formData.username.trim(),
-            password: formData.password.trim(),
-            email: formData.email.trim(),
-            name: formData.name.trim(),
-            phone_number: formData.phone_number.trim()
-        };
+      if (!validateForm()) return;
 
-        const response = await authApi.register(sanitizedData);
-        
-        if (response.success) {
-            setSuccess(true);
-            // Clear form
-            setFormData({
-                username: '',
-                password: '',
-                email: '',
-                name: '',
-                phone_number: ''
-            });
+      const sanitizedData = {
+        username: formData.username.trim(),
+        password: formData.password.trim(),
+        email: formData.email.trim(),
+        name: formData.name.trim(),
+        phone_number: formData.phone_number.trim()
+      };
 
-            // Chờ 2 giây để người dùng thấy thông báo thành công
-            setTimeout(() => {
-                navigate('/login', { 
-                    state: { 
-                        message: 'Đăng ký thành công! Vui lòng đăng nhập với tài khoản của bạn.' 
-                    } 
-                });
-            }, 2000);
-        }
+      const response = await authApi.register(sanitizedData);
+      
+      if (response.success) {
+        setSuccess(true);
+        // Clear form
+        setFormData({
+          username: '',
+          password: '',
+          email: '',
+          name: '',
+          phone_number: ''
+        });
+
+        // Chờ 2 giây để người dùng thấy thông báo thành công
+        setTimeout(() => {
+          navigate('/login', { 
+            state: { 
+              message: 'Đăng ký thành công! Vui lòng đăng nhập với tài khoản của bạn.' 
+            } 
+          });
+        }, 2000);
+      }
     } catch (err: any) {
-        const errorMessage = err.response?.data?.message || 'Đăng ký thất bại. Vui lòng thử lại.';
-        setError(errorMessage);
-        console.error('Registration error:', err);
+      const errorMessage = err.response?.data?.message || 'Đăng ký thất bại. Vui lòng thử lại.';
+      setError(errorMessage);
+      console.error('Registration error:', err);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 

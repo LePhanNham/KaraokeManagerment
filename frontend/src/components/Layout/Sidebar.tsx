@@ -12,11 +12,13 @@ import {
   Box
 } from '@mui/material';
 import { 
-  Dashboard,
-  CalendarToday,
-  MeetingRoom,
-  BarChart,
-  Settings
+  Dashboard, 
+  CalendarToday, 
+  MeetingRoom, 
+  BarChart, 
+  Settings,
+  GroupWork,
+  Payment
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -31,9 +33,11 @@ const Sidebar = () => {
   const menuItems = [
     { text: 'Trang chủ', icon: <Dashboard />, path: '/' },
     { text: 'Đặt phòng', icon: <CalendarToday />, path: '/bookings' },
+    { text: 'Nhóm đặt phòng', icon: <GroupWork />, path: '/booking-groups' },
     { text: 'Quản lý phòng', icon: <MeetingRoom />, path: '/rooms' },
     { text: 'Thống kê', icon: <BarChart />, path: '/reports' },
-    { text: 'Cài đặt', icon: <Settings />, path: '/settings' }
+    { text: 'Cài đặt', icon: <Settings />, path: '/settings' },
+    { text: 'Thanh toán', icon: <Payment />, path: '/checkout' }
   ];
 
   const isActive = (path: string) => {

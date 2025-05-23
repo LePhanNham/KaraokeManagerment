@@ -31,7 +31,7 @@ const Login = () => {
 
   useEffect(() => {
     // Redirect if already authenticated
-    if (authApi.isAuthenticated()) {
+    if (authApi.isLoggedIn()) {
       navigate('/');
     }
   }, [navigate]);

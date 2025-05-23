@@ -10,6 +10,11 @@ import Rooms from './pages/Rooms';
 import Profile from './pages/Profile';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import BookingGroups from './pages/BookingGroups';
+import Checkout from './pages/Checkout';
+import CheckoutDetail from './pages/CheckoutDetail';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
@@ -18,7 +23,7 @@ interface PrivateRouteProps {
 const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
   const { isAuthenticated, checkAuth } = useAuth();
   const location = useLocation();
-  
+
   // Check authentication when component mounts or location changes
   useEffect(() => {
     const isAuth = checkAuth();
@@ -27,7 +32,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
       return;
     }
   }, [checkAuth, location]);
-  
+
   // If authenticated, render children, otherwise the checkAuth function
   // will handle the redirection to login
   return isAuthenticated ? <>{children}</> : null;
@@ -50,13 +55,19 @@ const AppRoutes = () => {
                 <Route path="/bookings" element={<Bookings />} />
                 <Route path="/bookings/new" element={<Bookings />} />
                 <Route path="/bookings/:id" element={<Bookings />} />
-                
+                <Route path="/booking-groups" element={<BookingGroups />} />
+
                 <Route path="/rooms" element={<Rooms />} />
                 <Route path="/rooms/new" element={<Rooms />} />
                 <Route path="/rooms/:id" element={<Rooms />} />
-                
+                <Route path="/checkout" element={<Checkout />}></Route>
+                <Route path="/checkout/:id" element={
+                  <PrivateRoute>
+                    <CheckoutDetail />
+                  </PrivateRoute>
+                } />
                 <Route path="/reports" element={<Reports />} />
-                
+
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
@@ -74,6 +85,7 @@ const App = () => {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <ToastContainer />
       </AuthProvider>
     </BrowserRouter>
   );
