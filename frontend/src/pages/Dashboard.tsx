@@ -45,40 +45,43 @@ const Dashboard = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Get room data
         const roomResponse = await roomService.getAllRooms();
-        
+
         // Get booking data to determine room status
         const bookingsResponse = await bookingService.getAllBookings();
-        
+
         // Get current month's revenue data
         const currentYear = new Date().getFullYear();
         const revenueResponse = await reportService.getMonthlyRevenue(currentYear);
-        
+
         // Calculate today's stats from the monthly data
         const currentMonth = new Date().getMonth() + 1; // JavaScript months are 0-indexed
-        const currentMonthData = revenueResponse.success ? 
+        const currentMonthData = revenueResponse.success ?
           revenueResponse.data.find(item => item.period === currentMonth) : null;
-        
+
         if (roomResponse.success && bookingsResponse.success) {
           setRooms(roomResponse.data);
           setBookings(bookingsResponse.data);
-          
+
           // Find active bookings (confirmed bookings where current time is between start and end)
           const now = new Date();
-          const activeBookings = bookingsResponse.data.filter((booking: Booking) => 
-            booking.status === 'confirmed' && 
-            new Date(booking.start_time) <= now && 
+          const activeBookings = bookingsResponse.data.filter((booking: Booking) =>
+            booking.status === 'confirmed' &&
+            new Date(booking.start_time) <= now &&
             new Date(booking.end_time) > now
           );
-          
+
           // Count available rooms (those without active bookings)
-          const occupiedRoomIds = activeBookings.map((booking: Booking) => booking.room_id);
+          const occupiedRoomIds = activeBookings.map((booking: Booking) => {
+            // Get room_id from first room in booking
+            return booking.rooms?.[0]?.room_id;
+          }).filter(Boolean);
           const availableRoomsCount = roomResponse.data.filter(
             room => room.id !== undefined && !occupiedRoomIds.includes(room.id)
           ).length;
-          
+
           setStats({
             availableRooms: availableRoomsCount,
             totalCustomers: currentMonthData ? currentMonthData.bookings_count : 0,
@@ -97,15 +100,17 @@ const Dashboard = () => {
 
   const isRoomOccupied = (roomId: number | undefined) => {
     if (!roomId) return false;
-    
+
     // Check if there's an active booking for this room
     const now = new Date();
-    return bookings.some((booking: Booking) => 
-      booking.room_id === roomId && 
-      booking.status === 'confirmed' && 
-      new Date(booking.start_time) <= now && 
-      new Date(booking.end_time) > now
-    );
+    return bookings.some((booking: Booking) => {
+      // Check if any room in the booking matches the roomId
+      const hasRoom = booking.rooms?.some(room => room.room_id === roomId);
+      return hasRoom &&
+        booking.status === 'confirmed' &&
+        new Date(booking.start_time) <= now &&
+        new Date(booking.end_time) > now;
+    });
   };
 
   const getStatusColor = (roomId: number | undefined) => {
@@ -131,9 +136,9 @@ const Dashboard = () => {
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h4">Dashboard</Typography>
-        <Button 
-          variant="contained" 
-          color="primary" 
+        <Button
+          variant="contained"
+          color="primary"
           onClick={handleViewReports}
         >
           Xem thống kê
@@ -187,7 +192,7 @@ const Dashboard = () => {
         <List>
           {rooms.map((room, index) => {
             const occupied = isRoomOccupied(room.id);
-            
+
             return (
               <React.Fragment key={room.id}>
                 <ListItem>

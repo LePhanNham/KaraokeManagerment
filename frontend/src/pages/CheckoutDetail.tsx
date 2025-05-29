@@ -62,10 +62,13 @@ const CheckoutDetail = () => {
       const bookingData = bookingResponse.data;
       setBooking(bookingData);
 
-      // Get room details
-      const roomResponse = await roomService.getRoomById(bookingData.room_id);
-      if (roomResponse.success && roomResponse.data) {
-        setRoom(roomResponse.data);
+      // Get room details from booking rooms
+      const firstRoom = bookingData.rooms?.[0];
+      if (firstRoom?.room_id) {
+        const roomResponse = await roomService.getRoomById(firstRoom.room_id);
+        if (roomResponse.success && roomResponse.data) {
+          setRoom(roomResponse.data);
+        }
       }
 
       // Calculate payment amount

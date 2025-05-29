@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
+import { BookingCartProvider } from './contexts/BookingCartContext';
 import Layout from './components/Layout/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -10,9 +12,11 @@ import Rooms from './pages/Rooms';
 import Profile from './pages/Profile';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
-import BookingGroups from './pages/BookingGroups';
 import Checkout from './pages/Checkout';
 import CheckoutDetail from './pages/CheckoutDetail';
+import BookingConfirmation from './pages/BookingConfirmation';
+import BookingCart from './pages/BookingCart';
+import Payment from './pages/Payment';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -55,12 +59,13 @@ const AppRoutes = () => {
                 <Route path="/bookings" element={<Bookings />} />
                 <Route path="/bookings/new" element={<Bookings />} />
                 <Route path="/bookings/:id" element={<Bookings />} />
-                <Route path="/booking-groups" element={<BookingGroups />} />
+                <Route path="/booking-confirmation" element={<BookingConfirmation />} />
+                <Route path="/checkout" element={<BookingCart />} />
+                <Route path="/payment" element={<Payment />} />
 
                 <Route path="/rooms" element={<Rooms />} />
                 <Route path="/rooms/new" element={<Rooms />} />
                 <Route path="/rooms/:id" element={<Rooms />} />
-                <Route path="/checkout" element={<Checkout />}></Route>
                 <Route path="/checkout/:id" element={
                   <PrivateRoute>
                     <CheckoutDetail />
@@ -84,8 +89,12 @@ const App = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
-        <ToastContainer />
+        <NotificationProvider>
+          <BookingCartProvider>
+            <AppRoutes />
+            <ToastContainer />
+          </BookingCartProvider>
+        </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -9,18 +9,28 @@ export const calculatePaymentStatus = (booking: BookingWithRoom): PaymentStatus 
   if (!booking.total_amount || booking.total_amount <= 0) {
     return 'paid';
   }
-  
+
   // Nếu booking đã hủy, không cần thanh toán
   if (booking.status === 'cancelled') {
     return 'paid';
   }
-  
-  // Giả lập kiểm tra thanh toán một phần (trong thực tế sẽ dựa vào dữ liệu từ API)
-  // Ví dụ: nếu booking có id chẵn thì coi như đã thanh toán một phần
-  if (booking.id && booking.id % 2 === 0) {
-    return 'partially_paid';
+
+  // Sử dụng payment_status từ backend nếu có
+  if (booking.payment_status) {
+    return booking.payment_status;
   }
-  
+
+  // Fallback: tính toán dựa trên total_rooms và paid_rooms
+  if (booking.total_rooms && booking.paid_rooms !== undefined) {
+    if (booking.paid_rooms >= booking.total_rooms) {
+      return 'paid';
+    } else if (booking.paid_rooms > 0) {
+      return 'partially_paid';
+    } else {
+      return 'unpaid';
+    }
+  }
+
   // Mặc định là chưa thanh toán
   return 'unpaid';
 };

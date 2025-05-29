@@ -6,10 +6,8 @@ import bcrypt from 'bcrypt';
 interface CustomerRow extends RowDataPacket, Customer {}
 
 class CustomerService {
-    private db: Pool;
-
-    constructor() {
-        this.db = database.getPool();
+    private get db(): Pool {
+        return database.getPool();
     }
 
     async createCustomer(customerData: Partial<Customer>): Promise<Customer> {
@@ -43,8 +41,8 @@ class CustomerService {
     }
 
     private validateCustomerData(customerData: Partial<Customer>): boolean {
-        return !!(customerData.username && 
-                 customerData.password && 
+        return !!(customerData.username &&
+                 customerData.password &&
                  customerData.email &&
                  this.validateEmail(customerData.email));
     }
@@ -97,7 +95,7 @@ class CustomerService {
         const setClause = Object.keys(updateData)
             .map(key => `${key} = ?`)
             .join(', ');
-        
+
         try {
             await this.db.execute(
                 `UPDATE customers SET ${setClause} WHERE id = ?`,

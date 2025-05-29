@@ -1,5 +1,5 @@
 import React from 'react';
-import { 
+import {
   AppBar,
   Toolbar,
   Typography,
@@ -12,7 +12,7 @@ import {
   MenuItem,
   Avatar
 } from '@mui/material';
-import { 
+import {
   Menu as MenuIcon,
   MeetingRoom,
   CalendarToday,
@@ -22,6 +22,7 @@ import {
   BarChart
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import BookingCartIcon from '../CartIcon';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -52,9 +53,9 @@ const Header = () => {
   };
 
   return (
-    <AppBar 
-      position="fixed" 
-      sx={{ 
+    <AppBar
+      position="fixed"
+      sx={{
         zIndex: theme.zIndex.drawer + 1,
         backgroundColor: theme.palette.background.paper,
         color: theme.palette.text.primary,
@@ -62,9 +63,9 @@ const Header = () => {
       }}
     >
       <Toolbar>
-        <Typography 
-          variant="h6" 
-          sx={{ 
+        <Typography
+          variant="h6"
+          sx={{
             flexGrow: 1,
             fontWeight: 700,
             letterSpacing: 1,
@@ -99,10 +100,11 @@ const Header = () => {
           </Box>
         )}
 
-        <Box sx={{ ml: 2, display: 'flex', alignItems: 'center' }}>
-          <Avatar 
-            sx={{ 
-              width: 32, 
+        <Box sx={{ ml: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <BookingCartIcon />
+          <Avatar
+            sx={{
+              width: 32,
               height: 32,
               bgcolor: theme.palette.primary.main,
               cursor: 'pointer'
@@ -111,7 +113,7 @@ const Header = () => {
           >
             <Person />
           </Avatar>
-          
+
           <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
@@ -119,7 +121,7 @@ const Header = () => {
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
           >
-            <MenuItem 
+            <MenuItem
               onClick={() => {
                 navigate('/profile');
                 handleClose();
@@ -129,7 +131,7 @@ const Header = () => {
               Thông tin cá nhân
             </MenuItem>
             {isMobile && menuItems.map((item) => (
-              <MenuItem 
+              <MenuItem
                 key={item.text}
                 onClick={() => {
                   navigate(item.path);

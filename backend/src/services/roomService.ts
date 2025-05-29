@@ -3,13 +3,10 @@ import database from '../config/database';
 import { Room, RoomRow, RoomType } from '../models/Room';
 
 class RoomService {
-    private db: Pool;
-    private validRoomTypes: RoomType[] = ['Standard', 'VIP', 'Premium', 'Suite'];
-
-
-    constructor() {
-        this.db = database.getPool();
+    private get db(): Pool {
+        return database.getPool();
     }
+    private validRoomTypes: RoomType[] = ['Standard', 'VIP', 'Premium', 'Suite'];
 
     private validateAndConvertType(type: string | undefined): RoomType {
         if (!type) {
@@ -19,7 +16,7 @@ class RoomService {
             console.warn(`Invalid room type: ${type}. Using default 'Standard'`);
             return 'Standard'; // Sử dụng giá trị mặc định thay vì ném lỗi
         }
-        
+
         return type as RoomType;
     }
 
@@ -27,13 +24,13 @@ class RoomService {
         try {
             let query = 'SELECT COUNT(*) as count FROM rooms WHERE name = ?';
             const params: any[] = [name];
-            
+
             // If excludeId is provided, exclude that room from the check (for updates)
             if (excludeId) {
                 query += ' AND id != ?';
                 params.push(excludeId);
             }
-            
+
             const [result] = await this.db.execute<RowDataPacket[]>(query, params);
             return (result[0] as any).count > 0;
         } catch (error) {
@@ -84,7 +81,7 @@ class RoomService {
             });
 
             const [result] = await this.db.execute<ResultSetHeader>(
-                `INSERT INTO rooms (name, type, price_per_hour, capacity) 
+                `INSERT INTO rooms (name, type, price_per_hour, capacity)
                  VALUES (?, ?, ?, ?)`,
                 [
                     roomData.name.trim(),
@@ -146,7 +143,7 @@ class RoomService {
             // Convert RoomRow to Room
             return {
                 id: rows[0].id,
-                name: rows[0].name, 
+                name: rows[0].name,
                 type: rows[0].type,
                 price_per_hour: Number(rows[0].price_per_hour),
                 capacity: Number(rows[0].capacity),
@@ -258,7 +255,7 @@ class RoomService {
                 'DELETE FROM rooms WHERE id = ?',
                 [id]
             );
-            
+
             return result.affectedRows > 0;
         } catch (error) {
             console.error('Error deleting room:', error);

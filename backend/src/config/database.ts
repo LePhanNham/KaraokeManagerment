@@ -32,7 +32,7 @@ class Database {
                 host: process.env.DB_HOST || 'localhost',
                 user: process.env.DB_USER || 'root',
                 password: process.env.DB_PASSWORD || '19032003',
-                database: process.env.DB_NAME || 'karaoke_management',
+                database: process.env.DB_NAME || 'karaoke_managements',
                 waitForConnections: true,
                 connectionLimit: 10,
                 queueLimit: 0

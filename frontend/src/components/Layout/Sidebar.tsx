@@ -1,5 +1,5 @@
 import React from 'react';
-import { 
+import {
   Drawer,
   List,
   ListItem,
@@ -11,14 +11,15 @@ import {
   Divider,
   Box
 } from '@mui/material';
-import { 
-  Dashboard, 
-  CalendarToday, 
-  MeetingRoom, 
-  BarChart, 
+import {
+  Dashboard,
+  CalendarToday,
+  MeetingRoom,
+  BarChart,
   Settings,
   GroupWork,
-  Payment
+  Payment,
+  ShoppingCart
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -33,11 +34,11 @@ const Sidebar = () => {
   const menuItems = [
     { text: 'Trang chủ', icon: <Dashboard />, path: '/' },
     { text: 'Đặt phòng', icon: <CalendarToday />, path: '/bookings' },
-    { text: 'Nhóm đặt phòng', icon: <GroupWork />, path: '/booking-groups' },
+    { text: 'Giỏ đặt phòng', icon: <ShoppingCart />, path: '/checkout' },
     { text: 'Quản lý phòng', icon: <MeetingRoom />, path: '/rooms' },
+    { text: 'Thanh toán', icon: <Payment />, path: '/payment' },
     { text: 'Thống kê', icon: <BarChart />, path: '/reports' },
-    { text: 'Cài đặt', icon: <Settings />, path: '/settings' },
-    { text: 'Thanh toán', icon: <Payment />, path: '/checkout' }
+    { text: 'Cài đặt', icon: <Settings />, path: '/settings' }
   ];
 
   const isActive = (path: string) => {
@@ -50,8 +51,8 @@ const Sidebar = () => {
       sx={{
         width: drawerWidth,
         flexShrink: 0,
-        [`& .MuiDrawer-paper`]: { 
-          width: drawerWidth, 
+        [`& .MuiDrawer-paper`]: {
+          width: drawerWidth,
           boxSizing: 'border-box',
           backgroundColor: theme.palette.background.paper,
           borderRight: `1px solid ${theme.palette.divider}`
@@ -63,8 +64,8 @@ const Sidebar = () => {
       <Box sx={{ overflow: 'auto', mt: 2 }}>
         <List>
           {menuItems.map((item) => (
-            <ListItem 
-              button 
+            <ListItem
+              button
               key={item.text}
               onClick={() => navigate(item.path)}
               sx={{
@@ -77,13 +78,13 @@ const Sidebar = () => {
                 }
               }}
             >
-              <ListItemIcon sx={{ 
-                color: isActive(item.path) ? theme.palette.primary.main : theme.palette.text.secondary 
+              <ListItemIcon sx={{
+                color: isActive(item.path) ? theme.palette.primary.main : theme.palette.text.secondary
               }}>
                 {item.icon}
               </ListItemIcon>
-              <ListItemText 
-                primary={item.text} 
+              <ListItemText
+                primary={item.text}
                 primaryTypographyProps={{
                   fontWeight: isActive(item.path) ? 'bold' : 'normal',
                   color: isActive(item.path) ? theme.palette.primary.main : theme.palette.text.primary

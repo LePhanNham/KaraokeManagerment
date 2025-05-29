@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { authApi } from '../services/auth';
 import { bookingService } from '../services/bookingService';
-import { 
-  Box, 
-  Typography, 
-  Paper, 
-  TextField, 
-  Button, 
-  Grid, 
-  Divider, 
-  Tab, 
-  Tabs, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
+import {
+  Box,
+  Typography,
+  Paper,
+  TextField,
+  Button,
+  Grid,
+  Divider,
+  Tab,
+  Tabs,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
   TableRow,
   CircularProgress,
   Alert,
@@ -146,7 +146,7 @@ const Profile = () => {
         setSuccess('Cập nhật thông tin thành công');
         setProfile(response.data);
         setEditMode(false);
-        
+
         // Clear success message after 3 seconds
         setTimeout(() => setSuccess(''), 3000);
       }
@@ -173,20 +173,20 @@ const Profile = () => {
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validation code...
-    
+
     try {
       setLoading(true);
       const response = await authApi.changePassword({
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword
       });
-      
+
       if (response.success) {
         setSuccess('Đổi mật khẩu thành công');
         handlePasswordDialogClose();
-        
+
         // Clear success message after 3 seconds
         setTimeout(() => setSuccess(''), 3000);
       }
@@ -213,7 +213,7 @@ const Profile = () => {
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: 2 }}>
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      
+
       <Paper sx={{ mb: 3 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange} aria-label="profile tabs">
@@ -221,7 +221,7 @@ const Profile = () => {
             <Tab label="Lịch sử đặt phòng" />
           </Tabs>
         </Box>
-        
+
         <TabPanel value={tabValue} index={0}>
           <Box component="form" onSubmit={handleUpdateProfile}>
             <Grid container spacing={3}>
@@ -233,7 +233,7 @@ const Profile = () => {
                   {profile?.username}
                 </Typography>
               </Grid>
-              
+
               <Grid item xs={12} sm={6}>
                 <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                   Vai trò
@@ -242,11 +242,11 @@ const Profile = () => {
                   {profile?.role === 'admin' ? 'Quản trị viên' : 'Khách hàng'}
                 </Typography>
               </Grid>
-              
+
               <Grid item xs={12}>
                 <Divider sx={{ my: 2 }} />
               </Grid>
-              
+
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -258,7 +258,7 @@ const Profile = () => {
                   required
                 />
               </Grid>
-              
+
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -271,7 +271,7 @@ const Profile = () => {
                   required
                 />
               </Grid>
-              
+
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -282,7 +282,7 @@ const Profile = () => {
                   disabled={!editMode}
                 />
               </Grid>
-              
+
               <Grid item xs={12}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
                   {!editMode ? (
@@ -327,7 +327,7 @@ const Profile = () => {
             </Grid>
           </Box>
         </TabPanel>
-        
+
         <TabPanel value={tabValue} index={1}>
           {bookings.length > 0 ? (
             <TableContainer>
@@ -344,10 +344,10 @@ const Profile = () => {
                 <TableBody>
                   {bookings.map((booking) => (
                     <TableRow key={booking.id}>
-                      <TableCell>{booking.room_id}</TableCell>
+                      <TableCell>{booking.rooms?.[0]?.room_id || 'N/A'}</TableCell>
                       <TableCell>{format(new Date(booking.start_time), 'dd/MM/yyyy HH:mm')}</TableCell>
                       <TableCell>
-                        {booking.end_time 
+                        {booking.end_time
                           ? format(new Date(booking.end_time), 'dd/MM/yyyy HH:mm')
                           : '-'}
                       </TableCell>

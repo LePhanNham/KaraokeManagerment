@@ -9,25 +9,23 @@ interface RevenueData {
 }
 
 class ReportService {
-    private db: Pool;
-
-    constructor() {
-        this.db = database.getPool();
+    private get db(): Pool {
+        return database.getPool();
     }
 
     async getRevenueByMonth(year: number): Promise<RevenueData[]> {
         try {
             console.log(`Getting revenue data for year: ${year}`);
-            
+
             const query = `
-                SELECT 
+                SELECT
                     MONTH(start_time) as period,
                     SUM(total_amount) as total_revenue,
                     COUNT(*) as bookings_count,
                     AVG(total_amount) as avg_revenue
                 FROM bookings
-                WHERE 
-                    YEAR(start_time) = ? 
+                WHERE
+                    YEAR(start_time) = ?
                     AND status IN ('completed', 'confirmed')
                     AND EXISTS (SELECT 1 FROM payments WHERE payments.booking_id = bookings.id)
                 GROUP BY MONTH(start_time)
@@ -37,7 +35,7 @@ class ReportService {
             console.log('Executing query:', query);
             const [rows] = await this.db.execute<RowDataPacket[]>(query, [year]);
             console.log('Query result:', rows);
-            
+
             return rows.map(row => ({
                 period: Number(row.period),
                 total_revenue: Number(row.total_revenue),
@@ -53,16 +51,16 @@ class ReportService {
     async getRevenueByQuarter(year: number): Promise<RevenueData[]> {
         try {
             console.log(`Getting quarterly revenue data for year: ${year}`);
-            
+
             const query = `
-                SELECT 
+                SELECT
                     QUARTER(start_time) as period,
                     SUM(total_amount) as total_revenue,
                     COUNT(*) as bookings_count,
                     AVG(total_amount) as avg_revenue
                 FROM bookings
-                WHERE 
-                    YEAR(start_time) = ? 
+                WHERE
+                    YEAR(start_time) = ?
                     AND status IN ('completed', 'confirmed')
                     AND EXISTS (SELECT 1 FROM payments WHERE payments.booking_id = bookings.id)
                 GROUP BY QUARTER(start_time)
@@ -72,7 +70,7 @@ class ReportService {
             console.log('Executing query:', query);
             const [rows] = await this.db.execute<RowDataPacket[]>(query, [year]);
             console.log('Query result:', rows);
-            
+
             return rows.map(row => ({
                 period: Number(row.period),
                 total_revenue: Number(row.total_revenue),
@@ -88,15 +86,15 @@ class ReportService {
     async getRevenueByYear(startYear: number, endYear: number): Promise<RevenueData[]> {
         try {
             console.log(`Getting yearly revenue data from ${startYear} to ${endYear}`);
-            
+
             const query = `
-                SELECT 
+                SELECT
                     YEAR(start_time) as period,
                     SUM(total_amount) as total_revenue,
                     COUNT(*) as bookings_count,
                     AVG(total_amount) as avg_revenue
                 FROM bookings
-                WHERE 
+                WHERE
                     YEAR(start_time) BETWEEN ? AND ?
                     AND status IN ('completed', 'confirmed')
                     AND EXISTS (SELECT 1 FROM payments WHERE payments.booking_id = bookings.id)
@@ -107,7 +105,7 @@ class ReportService {
             console.log('Executing query:', query);
             const [rows] = await this.db.execute<RowDataPacket[]>(query, [startYear, endYear]);
             console.log('Query result:', rows);
-            
+
             return rows.map(row => ({
                 period: Number(row.period),
                 total_revenue: Number(row.total_revenue),
@@ -123,39 +121,41 @@ class ReportService {
     async getTopRooms(year: number, limit: number = 5): Promise<any[]> {
         try {
             console.log(`Getting top ${limit} rooms for year: ${year}`);
-            
+
             // Convert limit to a number to ensure it's the right type
             const limitValue = Number(limit);
-            
-            // Construct query with hardcoded LIMIT
+
+            // Construct query with hardcoded LIMIT - using booking_rooms junction table
             const query = `
-                SELECT 
+                SELECT
                     r.id,
                     r.name,
                     r.type,
-                    COUNT(b.id) as booking_count,
-                    SUM(IFNULL(b.total_amount, 0)) as total_revenue
+                    COUNT(DISTINCT b.id) as booking_count,
+                    SUM(IFNULL(br.price_per_hour *
+                        TIMESTAMPDIFF(HOUR, br.start_time, br.end_time), 0)) as total_revenue
                 FROM rooms r
-                LEFT JOIN bookings b ON b.room_id = r.id AND YEAR(b.start_time) = ? 
+                LEFT JOIN booking_rooms br ON br.room_id = r.id
+                LEFT JOIN bookings b ON b.id = br.booking_id
+                    AND YEAR(b.start_time) = ?
                     AND b.status IN ('completed', 'confirmed')
-                    AND EXISTS (SELECT 1 FROM payments WHERE payments.booking_id = b.id)
-                GROUP BY r.id
+                GROUP BY r.id, r.name, r.type
                 ORDER BY total_revenue DESC
                 LIMIT ${limitValue}
             `;
 
             console.log('Executing query:', query);
             console.log('Query parameters:', [year]);
-            
+
             // Use execute with only the year parameter
             const [rows] = await this.db.execute<RowDataPacket[]>(query, [year]);
             console.log('Query result:', rows);
-            
+
             return rows as any[];
         } catch (error) {
             console.error('Error getting top rooms:', error);
             console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
-            
+
             // Return empty array instead of throwing error
             return [];
         }

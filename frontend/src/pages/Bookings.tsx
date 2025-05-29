@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Key } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -59,6 +60,8 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { calculatePaymentStatus, PaymentStatus, isUnpaid, isPartiallyPaid, needsPayment } from '../utils/bookingUtils';
 import { notifySuccess, notifyError, notifyWarning } from '../utils/notificationUtils';
 import { confirmDialog } from '../utils/confirmUtils';
+import AddToCartButton from '../components/AddToCartButton';
+import { useBookingCart } from '../contexts/BookingCartContext';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -90,6 +93,7 @@ function TabPanel(props: TabPanelProps) {
 const Bookings = () => {
   const theme = useTheme();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(0);
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
   const [bookingTime, setBookingTime] = useState({
@@ -190,14 +194,13 @@ const Bookings = () => {
           }
         }
 
-        // Get room details for each booking
+        // Process bookings with room details (backend already provides rooms array)
         const bookingsWithRoomDetails = response.data.map((booking) => {
-          const room = roomsList.find(r => r.id === booking.room_id);
-
+          // Backend already provides rooms array with room details
           return {
             ...booking,
-            roomName: room?.name || `Phòng ${booking.room_id}`,
-            roomType: room?.type || 'Unknown'
+            // Keep the rooms array from backend
+            rooms: booking.rooms || []
           };
         });
 
@@ -315,7 +318,7 @@ const Bookings = () => {
   };
 
   const handleSubmit = async () => {
-    // Xử lý đặt phòng (một hoặc nhiều)
+    // Chuyển đến trang xác nhận đặt phòng
     if (selectedRooms.length === 0 || !user?.id) {
       setError('Vui lòng đăng nhập và chọn ít nhất một phòng');
       return;
@@ -323,65 +326,29 @@ const Bookings = () => {
 
     if (!validateTime()) return;
 
-    try {
-      setLoading(true);
+    // Tính số giờ và chuẩn bị dữ liệu
+    const start = new Date(bookingTime.start_time);
+    const end = new Date(bookingTime.end_time);
+    const hours = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60));
 
-      // Tính số giờ
-      const start = new Date(bookingTime.start_time);
-      const end = new Date(bookingTime.end_time);
-      const hours = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60));
+    // Chuẩn bị dữ liệu phòng đã chọn với thời gian và giá
+    const selectedRoomsWithDetails = selectedRooms.map(room => ({
+      ...room,
+      start_time: bookingTime.start_time,
+      end_time: bookingTime.end_time,
+      hours: hours,
+      subtotal: (room.price_per_hour || 0) * hours
+    }));
 
-      // Chuẩn bị dữ liệu đặt phòng
-      const bookingsData = selectedRooms.map(room => ({
-        room_id: room.id as number,
-        customer_id: user.id,
-        start_time: bookingTime.start_time,
-        end_time: bookingTime.end_time,
-        notes: bookingNotes,
-        status: 'pending' as "pending" | "confirmed" | "completed" | "cancelled",
-        total_amount: (room.price_per_hour || 0) * hours
-      }));
-
-      // Tính tổng tiền cho tất cả các phòng
-      const totalAmount = bookingsData.reduce((sum, booking) => sum + booking.total_amount, 0);
-
-      console.log('Bookings data:', {
-        bookings: bookingsData,
-        totalAmount,
-        hours
-      });
-
-      let response;
-
-      try {
-        // Thử sử dụng API đặt nhiều phòng
-        response = await bookingService.createMultipleBookings(user.id, bookingsData);
-      } catch (multipleError) {
-        console.error('Error with multiple bookings API, falling back to sequential:', multipleError);
-
-        // Nếu API đặt nhiều phòng không hoạt động, sử dụng phương thức fallback
-        if (selectedRooms.length === 1) {
-          // Nếu chỉ có 1 phòng, sử dụng API đặt phòng đơn lẻ
-          response = await bookingService.createBooking(bookingsData[0]);
-        } else {
-          // Nếu có nhiều phòng, sử dụng phương thức tạo tuần tự
-          response = await bookingService.createBookingsSequentially(user.id, bookingsData);
-        }
+    // Chuyển đến trang xác nhận
+    navigate('/booking-confirmation', {
+      state: {
+        selectedRooms: selectedRoomsWithDetails,
+        originalStartTime: bookingTime.start_time,
+        originalEndTime: bookingTime.end_time,
+        notes: bookingNotes
       }
-
-      if (response.success) {
-        notifySuccess(`Đặt phòng thành công! Tổng tiền: ${totalAmount.toLocaleString()}đ`);
-        handleReset();
-        await loadBookings();
-      } else {
-        setError(response.message || 'Lỗi không xác định khi đặt phòng');
-      }
-    } catch (err: any) {
-      console.error('Error creating bookings:', err);
-      setError(err.message || 'Lỗi khi đặt phòng');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleReset = () => {
@@ -525,7 +492,6 @@ const Bookings = () => {
       elevation={selectedRooms.some(r => r.id === room.id) ? 8 : 1}
       sx={{
         p: 2,
-        cursor: 'pointer',
         border: selectedRooms.some(r => r.id === room.id) ?
           `2px solid ${theme.palette.primary.main}` :
           '2px solid transparent',
@@ -534,7 +500,6 @@ const Bookings = () => {
           backgroundColor: theme.palette.action.hover
         }
       }}
-      onClick={() => toggleRoomSelection(room)}
     >
       <Typography variant="h6" gutterBottom>
         {room.name}
@@ -552,6 +517,23 @@ const Bookings = () => {
       <Typography color="textSecondary">
         Trạng thái: {(room as any).status || 'Trống'}
       </Typography>
+
+      <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+        <Button
+          variant={selectedRooms.some(r => r.id === room.id) ? "contained" : "outlined"}
+          onClick={() => toggleRoomSelection(room)}
+          size="small"
+          sx={{ flex: 1 }}
+        >
+          {selectedRooms.some(r => r.id === room.id) ? 'Đã chọn' : 'Chọn phòng'}
+        </Button>
+
+        <AddToCartButton
+          room={room}
+          variant="outlined"
+          size="small"
+        />
+      </Box>
     </Paper>
   );
 
@@ -911,13 +893,37 @@ const Bookings = () => {
     <TableRow key={booking.id}>
       <TableCell>{booking.id?.toString()}</TableCell>
       <TableCell>
-        <Typography variant="body2" fontWeight="medium">
-          {booking.roomName || `Phòng ${booking.room_id}`}
-        </Typography>
-        {booking.roomType && (
-          <Typography variant="caption" color="textSecondary" display="block">
-            Loại: {booking.roomType}
-          </Typography>
+        {booking.rooms && booking.rooms.length > 0 ? (
+          // Display multiple rooms
+          <Box>
+            {booking.rooms.map((room: any, index) => (
+              <Box key={room.room_id || index} sx={{ mb: index < (booking.rooms?.length || 0) - 1 ? 1 : 0 }}>
+                <Typography variant="body2" fontWeight="medium">
+                  {room.room_name || `Phòng ${room.room_id}`}
+                </Typography>
+                <Typography variant="caption" color="textSecondary" display="block">
+                  Loại: {room.room_type || 'Standard'}
+                </Typography>
+              </Box>
+            ))}
+            {booking.rooms.length > 1 && (
+              <Typography variant="caption" color="primary" display="block" sx={{ mt: 0.5 }}>
+                Tổng: {booking.rooms.length} phòng
+              </Typography>
+            )}
+          </Box>
+        ) : (
+          // Fallback for old data structure
+          <Box>
+            <Typography variant="body2" fontWeight="medium">
+              {booking.roomName || `Phòng ${booking.room_id}`}
+            </Typography>
+            {booking.roomType && (
+              <Typography variant="caption" color="textSecondary" display="block">
+                Loại: {booking.roomType}
+              </Typography>
+            )}
+          </Box>
         )}
       </TableCell>
       <TableCell>
@@ -931,21 +937,38 @@ const Bookings = () => {
         </Box>
       </TableCell>
       <TableCell>
-        <Chip
-          label={
-            booking.status === 'pending' ? 'Chờ xác nhận' :
-            booking.status === 'confirmed' ? 'Đã xác nhận' :
-            booking.status === 'completed' ? 'Hoàn thành' :
-            'Đã hủy'
+        {(() => {
+          const paymentStatus = calculatePaymentStatus(booking);
+
+          // Hiển thị status dựa trên payment status và booking status
+          let label = '';
+          let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';
+
+          if (booking.status === 'cancelled') {
+            label = 'Đã hủy';
+            color = 'error';
+          } else if (booking.status === 'completed') {
+            label = 'Hoàn thành';
+            color = 'success';
+          } else if (paymentStatus === 'paid') {
+            label = 'Đã thanh toán';
+            color = 'success';
+          } else if (booking.status === 'pending') {
+            label = 'Chờ xác nhận';
+            color = 'warning';
+          } else {
+            label = 'Chưa thanh toán';
+            color = 'error';
           }
-          color={
-            booking.status === 'pending' ? 'warning' :
-            booking.status === 'confirmed' ? 'primary' :
-            booking.status === 'completed' ? 'success' :
-            'error'
-          }
-          size="small"
-        />
+
+          return (
+            <Chip
+              label={label}
+              color={color}
+              size="small"
+            />
+          );
+        })()}
       </TableCell>
       <TableCell>
         {Number(booking.total_amount || 0).toLocaleString()}đ

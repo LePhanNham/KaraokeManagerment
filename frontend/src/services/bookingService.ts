@@ -8,7 +8,7 @@ export const bookingService = {
       // Validate dates first
       const start = new Date(startTime);
       const end = new Date(endTime);
-      
+
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
         throw new Error('Định dạng thời gian không hợp lệ');
       }
@@ -23,16 +23,15 @@ export const bookingService = {
           start_time: start.toISOString(),
           end_time: end.toISOString()
         });
-        
+
         // Add timeout and detailed error handling
-        const response = await api.get<ApiResponse<Room[]>>('/bookings/available', {
-          params: {
-            start_time: start.toISOString(),
-            end_time: end.toISOString()
-          },
+        const response = await api.post<ApiResponse<Room[]>>('/bookings/find-available-rooms', {
+          start_time: start.toISOString(),
+          end_time: end.toISOString()
+        }, {
           timeout: 15000 // Increase timeout to 15 seconds
         });
-        
+
         console.log('Available rooms response:', response.data);
         return response.data;
       } catch (error: any) {
@@ -40,7 +39,7 @@ export const bookingService = {
         console.log('Response status:', error.response?.status);
         console.log('Response headers:', error.response?.headers);
         console.log('Response data:', error.response?.data);
-        
+
         // Nếu có response từ server
         if (error.response) {
           throw {
@@ -49,7 +48,7 @@ export const bookingService = {
             data: []
           };
         }
-        
+
         // Nếu không có response (timeout, network error)
         if (error.request) {
           throw {
@@ -58,7 +57,7 @@ export const bookingService = {
             data: []
           };
         }
-        
+
         // Lỗi khác
         throw {
           success: false,
@@ -68,27 +67,52 @@ export const bookingService = {
       }
     } catch (error: any) {
       console.error('Error in findAvailableRooms:', error);
-      
+
       // Create a standardized error response
       const errorResponse: ApiResponse<Room[]> = {
         success: false,
         message: error.message || 'Lỗi khi tìm phòng trống',
         data: []
       };
-      
+
       throw errorResponse;
     }
   },
 
   createBooking: async (bookingData: BookingInput): Promise<ApiResponse<Booking>> => {
     try {
+      // Cấu trúc mới: một booking có thể chứa nhiều phòng
+      const rooms = bookingData.rooms || [{
+        room_id: bookingData.room_id,
+        start_time: bookingData.start_time,
+        end_time: bookingData.end_time,
+        price_per_hour: bookingData.price_per_hour || 0
+      }];
+
+      // Tính tổng tiền dựa trên thời gian và giá phòng
+      let totalAmount = 0;
+      if (bookingData.total_amount) {
+        totalAmount = bookingData.total_amount;
+      } else {
+        // Tính tự động nếu không có total_amount
+        for (const room of rooms) {
+          if (room.start_time && room.end_time && room.price_per_hour) {
+            const startTime = new Date(room.start_time);
+            const endTime = new Date(room.end_time);
+            const hours = Math.ceil((endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60));
+            totalAmount += hours * room.price_per_hour;
+          }
+        }
+      }
+
       const formattedData = {
-        ...bookingData,
-        total_amount: bookingData.total_amount || 0,
-        notes: bookingData.notes || '',
-        status: bookingData.status || 'pending'
+        customer_id: bookingData.customer_id,
+        bookings: rooms, // Backend expect 'bookings' not 'rooms'
+        total_amount: totalAmount,
+        notes: bookingData.notes || ''
       };
 
+      console.log('Creating booking with data:', formattedData);
       const response = await api.post<ApiResponse<Booking>>('/bookings', formattedData);
       console.log('Booking created:', response.data);
       return response.data;
@@ -97,61 +121,77 @@ export const bookingService = {
       throw error;
     }
   },
-  
+
   getAllBookings: async (): Promise<ApiResponse<BookingWithRoom[]>> => {
     try {
       const response = await api.get<ApiResponse<Booking[]>>('/bookings');
-      
+
       if (response.data.success && response.data.data) {
-        // Lấy thông tin phòng cho mỗi booking
-        const bookingsWithRoom: BookingWithRoom[] = [];
-        
-        for (const booking of response.data.data) {
-          try {
-            // Lấy thông tin phòng
-            const roomResponse = await api.get<ApiResponse<Room>>(`/rooms/${booking.room_id}`);
-            
-            if (roomResponse.data.success && roomResponse.data.data) {
-              const room = roomResponse.data.data;
-              
-              // Thêm thông tin phòng vào booking
-              const bookingWithRoom: BookingWithRoom = {
-                ...booking,
-                roomName: room.name,
-                price_per_hour: room.price_per_hour,
-                room: room
-              };
-              
-              bookingsWithRoom.push(bookingWithRoom);
-            } else {
-              // Nếu không lấy được thông tin phòng, vẫn thêm booking vào danh sách
-              bookingsWithRoom.push({
-                ...booking,
-                roomName: `Phòng ${booking.room_id}`,
-                room_id: booking.room_id
-              });
-            }
-          } catch (err) {
-            console.error(`Error fetching room info for booking ${booking.id}:`, err);
-            
-            // Nếu có lỗi, vẫn thêm booking vào danh sách
-            bookingsWithRoom.push({
-              ...booking,
-              roomName: `Phòng ${booking.room_id}`,
-              room_id: booking.room_id
-            });
-          }
-        }
-        
+        // Với cấu trúc mới, booking đã chứa thông tin rooms
+        const bookingsWithRoom: BookingWithRoom[] = response.data.data.map(booking => {
+          // Lấy thông tin phòng đầu tiên (để backward compatibility)
+          const firstRoom = booking.rooms?.[0];
+
+          return {
+            ...booking,
+            // Backward compatibility fields
+            room_id: firstRoom?.room_id,
+            price_per_hour: firstRoom?.price_per_hour,
+            // Display fields
+            roomName: firstRoom?.room?.name || `Phòng ${firstRoom?.room_id}`,
+            roomType: firstRoom?.room?.type,
+            roomCapacity: firstRoom?.room?.capacity,
+            roomPrice: firstRoom?.price_per_hour,
+            room: firstRoom?.room
+          };
+        });
+
         return {
           ...response.data,
           data: bookingsWithRoom
         };
       }
-      
+
       return response.data as ApiResponse<BookingWithRoom[]>;
     } catch (error: any) {
       console.error('Error fetching all bookings:', error);
+      throw error;
+    }
+  },
+
+  getUserBookings: async (userId: number): Promise<ApiResponse<BookingWithRoom[]>> => {
+    try {
+      const response = await api.get<ApiResponse<Booking[]>>(`/bookings/user/${userId}`);
+
+      if (response.data.success && response.data.data) {
+        // Với cấu trúc mới, booking đã chứa thông tin rooms
+        const bookingsWithRoom: BookingWithRoom[] = response.data.data.map(booking => {
+          // Lấy thông tin phòng đầu tiên (để backward compatibility)
+          const firstRoom = booking.rooms?.[0];
+
+          return {
+            ...booking,
+            // Backward compatibility fields
+            room_id: firstRoom?.room_id,
+            price_per_hour: firstRoom?.price_per_hour,
+            // Display fields
+            roomName: firstRoom?.room?.name || `Phòng ${firstRoom?.room_id}`,
+            roomType: firstRoom?.room?.type,
+            roomCapacity: firstRoom?.room?.capacity,
+            roomPrice: firstRoom?.price_per_hour,
+            room: firstRoom?.room
+          };
+        });
+
+        return {
+          ...response.data,
+          data: bookingsWithRoom
+        };
+      }
+
+      return response.data as ApiResponse<BookingWithRoom[]>;
+    } catch (error: any) {
+      console.error('Error fetching user bookings:', error);
       throw error;
     }
   },
@@ -165,21 +205,21 @@ export const bookingService = {
           'Content-Type': 'application/json'
         }
       });
-      
+
       return response.data;
     } catch (error: any) {
       console.error('Error updating booking:', error);
-      
+
       // Create a standardized error object
       const errorResponse = {
         success: false,
         message: 'Unknown error occurred',
         error: error
       };
-      
+
       if (error.response) {
         // The server responded with an error status
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                                `Server error: ${error.response.status}`;
       } else if (error.request) {
         // The request was made but no response was received
@@ -188,7 +228,7 @@ export const bookingService = {
         // Something happened in setting up the request
         errorResponse.message = error.message || 'Error occurred while setting up the request';
       }
-      
+
       throw errorResponse;
     }
   },
@@ -203,22 +243,22 @@ export const bookingService = {
       return response.data;
     } catch (error: any) {
       console.error('Error cancelling booking:', error);
-      
+
       const errorResponse = {
         success: false,
         message: 'Failed to cancel booking',
         error: error
       };
-      
+
       if (error.response) {
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                                `Server error: ${error.response.status}`;
       } else if (error.request) {
         errorResponse.message = 'No response received from server';
       } else {
         errorResponse.message = error.message || 'Unknown error occurred';
       }
-      
+
       throw errorResponse;
     }
   },
@@ -228,7 +268,7 @@ export const bookingService = {
       const data: Partial<BookingInput> = {
         status: 'completed'
       };
-      
+
       if (endTime) {
         // Format date to MySQL compatible format (YYYY-MM-DD HH:MM:SS)
         const year = endTime.getFullYear();
@@ -237,37 +277,37 @@ export const bookingService = {
         const hours = String(endTime.getHours()).padStart(2, '0');
         const minutes = String(endTime.getMinutes()).padStart(2, '0');
         const seconds = String(endTime.getSeconds()).padStart(2, '0');
-        
+
         data.end_time = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       }
-      
+
       if (totalAmount !== undefined) {
         data.total_amount = totalAmount;
       }
-      
+
       const response = await api.put<ApiResponse<Booking>>(`/bookings/${id}`, data, {
         timeout: 15000,
       });
-      
+
       return response.data;
     } catch (error: any) {
       console.error('Error completing booking:', error);
-      
+
       const errorResponse = {
         success: false,
         message: 'Không thể trả phòng',
         error: error
       };
-      
+
       if (error.response) {
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                                `Lỗi máy chủ: ${error.response.status}`;
       } else if (error.request) {
         errorResponse.message = 'Không nhận được phản hồi từ máy chủ';
       } else {
         errorResponse.message = error.message || 'Đã xảy ra lỗi không xác định';
       }
-      
+
       throw errorResponse;
     }
   },
@@ -283,7 +323,7 @@ export const bookingService = {
         bookings,
         endpoint: '/bookings/multiple'
       });
-      
+
       const response = await api.post<ApiResponse<{ booking_group: BookingGroup; bookings: Booking[] }>>(
         '/bookings/multiple',
         {
@@ -297,17 +337,17 @@ export const bookingService = {
           }
         }
       );
-      
+
       console.log('Multiple bookings response:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('Error creating multiple bookings:', error);
-      
+
       // Cải thiện xử lý lỗi
       if (error.response) {
         console.error('Response status:', error.response.status);
         console.error('Response data:', error.response.data);
-        
+
         // Nếu có thông báo lỗi từ server, sử dụng nó
         if (error.response.data?.message) {
           throw {
@@ -317,7 +357,7 @@ export const bookingService = {
           };
         }
       }
-      
+
       // Lỗi mặc định
       throw {
         success: false,
@@ -334,9 +374,9 @@ export const bookingService = {
   ): Promise<ApiResponse<Booking[]>> => {
     try {
       console.log('Falling back to sequential booking creation');
-      
+
       const createdBookings: Booking[] = [];
-      
+
       // Tạo từng booking một
       for (const booking of bookings) {
         // Sử dụng bookingService trực tiếp thay vì this
@@ -347,7 +387,7 @@ export const bookingService = {
           throw new Error(response.message || 'Failed to create booking');
         }
       }
-      
+
       return {
         success: true,
         message: 'Đặt phòng thành công',
@@ -369,22 +409,22 @@ export const bookingService = {
       return response.data;
     } catch (error: any) {
       console.error('Error fetching booking group:', error);
-      
+
       const errorResponse = {
         success: false,
         message: 'Lỗi khi lấy thông tin nhóm đặt phòng',
         error: error
       };
-      
+
       if (error.response) {
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                                `Lỗi máy chủ: ${error.response.status}`;
       } else if (error.request) {
         errorResponse.message = 'Không nhận được phản hồi từ máy chủ';
       } else {
         errorResponse.message = error.message || 'Đã xảy ra lỗi không xác định';
       }
-      
+
       throw errorResponse;
     }
   },
@@ -395,33 +435,33 @@ export const bookingService = {
       return response.data;
     } catch (error: any) {
       console.error('Error fetching bookings by group:', error);
-      
+
       const errorResponse = {
         success: false,
         message: 'Lỗi khi lấy danh sách đặt phòng trong nhóm',
         error: error
       };
-      
+
       if (error.response) {
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                                `Lỗi máy chủ: ${error.response.status}`;
       } else if (error.request) {
         errorResponse.message = 'Không nhận được phản hồi từ máy chủ';
       } else {
         errorResponse.message = error.message || 'Đã xảy ra lỗi không xác định';
       }
-      
+
       throw errorResponse;
     }
   },
 
   updateBookingGroupStatus: async (
-    groupId: number, 
+    groupId: number,
     status: string
   ): Promise<ApiResponse<BookingGroup>> => {
     try {
       const response = await api.put<ApiResponse<BookingGroup>>(
-        `/booking-groups/${groupId}/status`, 
+        `/booking-groups/${groupId}/status`,
         { status },
         {
           timeout: 10000
@@ -430,22 +470,22 @@ export const bookingService = {
       return response.data;
     } catch (error: any) {
       console.error('Error updating booking group status:', error);
-      
+
       const errorResponse = {
         success: false,
         message: 'Lỗi khi cập nhật trạng thái nhóm đặt phòng',
         error: error
       };
-      
+
       if (error.response) {
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                                `Lỗi máy chủ: ${error.response.status}`;
       } else if (error.request) {
         errorResponse.message = 'Không nhận được phản hồi từ máy chủ';
       } else {
         errorResponse.message = error.message || 'Đã xảy ra lỗi không xác định';
       }
-      
+
       throw errorResponse;
     }
   },
@@ -465,7 +505,7 @@ export const bookingService = {
         paymentMethod,
         notes
       });
-      
+
       const response = await api.put<ApiResponse<{ booking_group: BookingGroup; payment: any }>>(
         `/booking-groups/${groupId}/complete`,
         {
@@ -481,9 +521,9 @@ export const bookingService = {
           timeout: 15000 // Tăng timeout vì xử lý nhiều phòng
         }
       );
-      
+
       console.log('Response from server:', response.data);
-      
+
       return response.data;
     } catch (error: any) {
       console.error('Error completing booking group:', error);
@@ -507,7 +547,7 @@ export const bookingService = {
         paymentMethod,
         notes
       });
-      
+
       // Sử dụng endpoint mới
       const response = await api.post<ApiResponse<{booking: Booking, payment: any}>>(
         `/bookings/${id}/complete-with-payment`,
@@ -524,9 +564,9 @@ export const bookingService = {
           timeout: 15000
         }
       );
-      
+
       console.log('Complete booking with payment response:', response.data);
-      
+
       return response.data;
     } catch (error: any) {
       console.error('Error completing booking with payment:', error);
@@ -551,7 +591,7 @@ export const bookingService = {
           total_amount: newTotalAmount
         }
       );
-      
+
       return response.data;
     } catch (error: any) {
       console.error('Error extending booking:', error);
@@ -572,7 +612,7 @@ export const bookingService = {
           payment_status: paymentStatus
         }
       );
-      
+
       return response.data;
     } catch (error: any) {
       console.error('Error making payment:', error);
@@ -596,7 +636,7 @@ export const bookingService = {
   ): Promise<ApiResponse<Booking>> => {
     try {
       console.log(`Updating payment status for booking #${id} to ${paymentStatus}`);
-      
+
       const response = await api.put<ApiResponse<Booking>>(
         `/bookings/${id}/payment-status`,
         {
@@ -609,27 +649,27 @@ export const bookingService = {
           timeout: 10000
         }
       );
-      
+
       console.log('Payment status updated:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('Error updating payment status:', error);
-      
+
       const errorResponse = {
         success: false,
         message: 'Không thể cập nhật trạng thái thanh toán',
         error: error
       };
-      
+
       if (error.response) {
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                                `Lỗi máy chủ: ${error.response.status}`;
       } else if (error.request) {
         errorResponse.message = 'Không nhận được phản hồi từ máy chủ';
       } else {
         errorResponse.message = error.message || 'Đã xảy ra lỗi không xác định';
       }
-      
+
       throw errorResponse;
     }
   },
@@ -637,7 +677,7 @@ export const bookingService = {
   markAsPaid: async (id: number): Promise<ApiResponse<Booking>> => {
     try {
       console.log(`Marking booking #${id} as paid`);
-      
+
       // Use the existing updateBooking method to update just the payment status
       const response = await api.put<ApiResponse<Booking>>(
         `/bookings/${id}`,
@@ -651,33 +691,33 @@ export const bookingService = {
           timeout: 10000
         }
       );
-      
+
       console.log('Booking marked as paid:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('Error marking booking as paid:', error);
-      
+
       const errorResponse = {
         success: false,
         message: 'Không thể cập nhật trạng thái thanh toán',
         error: error
       };
-      
+
       if (error.response) {
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                                `Lỗi máy chủ: ${error.response.status}`;
       } else if (error.request) {
         errorResponse.message = 'Không nhận được phản hồi từ máy chủ';
       } else {
         errorResponse.message = error.message || 'Đã xảy ra lỗi không xác định';
       }
-      
+
       throw errorResponse;
     }
   },
 
   recordPaymentAndUpdateStatus: async (
-    bookingId: number, 
+    bookingId: number,
     amount: number,
     paymentMethod: string = 'cash',
     notes: string = ''
@@ -688,7 +728,7 @@ export const bookingService = {
         paymentMethod,
         notes
       });
-      
+
       // Create a payment record and update booking status in one request
       const response = await api.post<ApiResponse<{booking: Booking, payment: any}>>(
         `/bookings/${bookingId}/payment`,
@@ -705,36 +745,36 @@ export const bookingService = {
           timeout: 15000
         }
       );
-      
+
       console.log('Payment recorded and status updated:', response.data);
-      
+
       // Thêm code để cập nhật cache hoặc state nếu cần
-      
+
       return response.data;
     } catch (error: any) {
       console.error('Error recording payment:', error);
-      
+
       const errorResponse = {
         success: false,
         message: 'Không thể ghi nhận thanh toán',
         error: error
       };
-      
+
       if (error.response) {
-        errorResponse.message = error.response.data?.message || 
+        errorResponse.message = error.response.data?.message ||
                               `Lỗi máy chủ: ${error.response.status}`;
       } else if (error.request) {
         errorResponse.message = 'Không nhận được phản hồi từ máy chủ';
       } else {
         errorResponse.message = error.message || 'Đã xảy ra lỗi không xác định';
       }
-      
+
       throw errorResponse;
     }
   },
 
   recordPaymentAndUpdateStatusSeparately: async (
-    bookingId: number, 
+    bookingId: number,
     amount: number,
     paymentMethod: string = 'cash',
     notes: string = ''
@@ -751,11 +791,11 @@ export const bookingService = {
           notes
         }
       );
-      
+
       if (!paymentResponse.data.success) {
         throw new Error(paymentResponse.data.message || 'Failed to create payment record');
       }
-      
+
       // Then, update the booking status
       const bookingResponse = await api.put<ApiResponse<Booking>>(
         `/bookings/${bookingId}`,
@@ -763,11 +803,11 @@ export const bookingService = {
           payment_status: 'paid'
         }
       );
-      
+
       if (!bookingResponse.data.success) {
         throw new Error(bookingResponse.data.message || 'Failed to update booking status');
       }
-      
+
       return {
         success: true,
         message: 'Thanh toán thành công và đã cập nhật trạng thái',

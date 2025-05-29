@@ -231,7 +231,8 @@ const Rooms = () => {
               >
                 <MenuItem value="VIP">VIP</MenuItem>
                 <MenuItem value="Standard">Standard</MenuItem>
-                <MenuItem value="Normal">Normal</MenuItem>
+                <MenuItem value="Normal">Premium</MenuItem>
+                <MenuItem value="Normal">Suite</MenuItem>
               </Select>
             </FormControl>
             <TextField

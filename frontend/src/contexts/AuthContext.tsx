@@ -29,18 +29,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (username: string, password: string) => {
     try {
       const response = await authApi.login({ username, password });
-      
+
       if (response.success && response.data) {
         const { token, customer } = response.data;
-        
+
         // Store in localStorage
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(customer));
-        
+
         // Update state
         setUser({...customer, phone_number: '', role: 'user'});
-        
-        
+
+
         // Redirect to previous page or dashboard
         const from = location.state?.from || '/';
         navigate(from);
@@ -62,27 +62,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const checkAuth = (): boolean => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
-    
+
     if (!token || !storedUser) {
       // Clear any potentially invalid data
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       setUser(null);
-      
+
       // Redirect to login if not already there
-      if (location.pathname !== '/login' && 
-          location.pathname !== '/register' && 
+      if (location.pathname !== '/login' &&
+          location.pathname !== '/register' &&
           location.pathname !== '/quen-mat-khau') {
         navigate('/login', { state: { from: location.pathname } });
       }
       return false;
     }
-    
+
+    // Check if token is expired
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Date.now() / 1000;
+
+      if (payload.exp && payload.exp < currentTime) {
+        // Token expired, clear storage and redirect
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+        console.log('Token expired, redirecting to login');
+
+        if (location.pathname !== '/login') {
+          navigate('/login', { state: { from: location.pathname } });
+        }
+        return false;
+      }
+    } catch (error) {
+      // Invalid token format, clear storage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+      console.error('Invalid token format:', error);
+
+      if (location.pathname !== '/login') {
+        navigate('/login', { state: { from: location.pathname } });
+      }
+      return false;
+    }
+
     // If we have a token but no user in state, set the user
     if (token && storedUser && !user) {
       setUser(JSON.parse(storedUser));
     }
-    
+
     return true;
   };
 
