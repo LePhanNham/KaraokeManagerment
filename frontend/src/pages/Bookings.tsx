@@ -57,7 +57,7 @@ import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import NoteIcon from '@mui/icons-material/Note';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import { calculatePaymentStatus, PaymentStatus, isUnpaid, isPartiallyPaid, needsPayment } from '../utils/bookingUtils';
+import { calculatePaymentStatus, PaymentStatus, isUnpaid, isPartiallyPaid, needsPayment, isPaid } from '../utils/bookingUtils';
 import { notifySuccess, notifyError, notifyWarning } from '../utils/notificationUtils';
 import { confirmDialog } from '../utils/confirmUtils';
 import AddToCartButton from '../components/AddToCartButton';
@@ -369,16 +369,34 @@ const Bookings = () => {
     if (!id) return;
     try {
       setLoading(true);
-      // Cập nhật trạng thái booking thành 'confirmed'
-      const response = await bookingService.updateBooking(id, { status: 'confirmed' });
+
+      const bookingToConfirm = allBookings.find(b => b.id === id);
+      if (!bookingToConfirm) {
+        notifyError('Không tìm thấy đặt phòng để xác nhận.');
+        setLoading(false);
+        return;
+      }
+
+      const response = await bookingService.confirmBooking(id);
 
       if (response.success) {
-        // Tải lại danh sách booking và phòng
+        // Nếu booking chính được xác nhận, xác nhận tất cả các booking room liên quan
+        if (bookingToConfirm.rooms && bookingToConfirm.rooms.length > 0) {
+          await Promise.all(bookingToConfirm.rooms.map(async (room) => {
+            if (room.id) { // Đảm bảo room.id tồn tại
+              await bookingService.confirmBookingRoom(Number(room.id));
+            }
+          }));
+        }
+        notifySuccess('Xác nhận đặt phòng thành công!');
         await loadRooms();
         await loadBookings();
+      } else {
+        notifyError(response.message || 'Lỗi khi xác nhận đặt phòng.');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi xác nhận đặt phòng');
+      console.error('Error confirming booking:', err);
+      notifyError(err.response?.data?.message || 'Lỗi khi xác nhận đặt phòng');
     } finally {
       setLoading(false);
     }
@@ -394,14 +412,33 @@ const Bookings = () => {
     if (!confirmed) return;
 
     try {
-      const response = await bookingService.updateBooking(id, { status: 'cancelled' });
+      setLoading(true);
+      const bookingToCancel = allBookings.find(b => b.id === id);
+      if (!bookingToCancel) {
+        notifyError('Không tìm thấy đặt phòng để hủy.');
+        setLoading(false);
+        return;
+      }
+      const response = await bookingService.cancelBooking(id);
       if (response.success) {
+        // Nếu booking chính được hủy, hủy tất cả các booking room liên quan
+        if (bookingToCancel.rooms && bookingToCancel.rooms.length > 0) {
+          await Promise.all(bookingToCancel.rooms.map(async (room) => {
+            if (room.id) { // Đảm bảo room.id tồn tại
+              await bookingService.cancelBookingRoom(Number(room.id));
+            }
+          }));
+        }
         notifySuccess('Đã hủy đặt phòng thành công');
         await loadBookings();
+      } else {
+        notifyError(response.message || 'Lỗi khi hủy đặt phòng');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi hủy đặt phòng');
+      console.error('Error cancelling booking:', err);
       notifyError('Không thể hủy đặt phòng');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -471,8 +508,20 @@ const Bookings = () => {
   };
 
   // Hàm tiện ích để hiển thị thời gian nhất quán
-  const formatLocalDateTime = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatLocalDateTime = (dateInput: string | Date | null | undefined) => {
+    if (!dateInput) {
+      return 'N/A';
+    }
+    let date: Date;
+    if (typeof dateInput === 'string') {
+      date = new Date(dateInput);
+    } else {
+      date = dateInput;
+    }
+
+    if (isNaN(date.getTime())) {
+      return 'N/A'; // Hoặc một thông báo lỗi khác
+    }
 
     // Hiển thị thời gian theo múi giờ Việt Nam
     return date.toLocaleString('vi-VN', {
@@ -643,115 +692,114 @@ const Bookings = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              Object.entries(groupedBookings).map(([groupKey, groupBookings]) => {
-                const isGroup = groupKey.startsWith('group-');
-                const groupId = groupKey.split('-')[1];
-                const isExpanded = expandedGroups[groupKey] || false;
+              Object.entries(groupedBookings).map(([groupKey, bookingsInGroup]) => {
+                const isGroup = groupKey.startsWith('group-') && bookingsInGroup.length > 1;
+                const bookingOrGroup = isGroup ? {
+                  id: groupKey,
+                  start_time: new Date(Math.min(...bookingsInGroup.map(b => new Date(b.start_time).getTime()))).toISOString(),
+                  end_time: new Date(Math.max(...bookingsInGroup.map(b => new Date(b.end_time).getTime()))).toISOString(),
+                  total_amount: calculateGroupTotal(bookingsInGroup),
+                  notes: bookingsInGroup[0].notes || 'Không có ghi chú',
+                  status: (() => {
+                    let status = 'completed';
+                    if (bookingsInGroup.some(b => b.status === 'pending')) status = 'pending';
+                    else if (bookingsInGroup.some(b => b.status === 'confirmed')) status = 'confirmed';
+                    else if (bookingsInGroup.some(b => b.status === 'cancelled')) status = 'cancelled';
+                    return status;
+                  })(),
+                  payment_status: (() => {
+                    let paymentStatus: PaymentStatus = 'paid';
+                    if (bookingsInGroup.some(b => isUnpaid(calculatePaymentStatus(b)))) {
+                      paymentStatus = 'unpaid';
+                    } else if (bookingsInGroup.some(b => isPartiallyPaid(calculatePaymentStatus(b)))) {
+                      paymentStatus = 'partially_paid';
+                    }
+                    return paymentStatus;
+                  })(),
+                  rooms: bookingsInGroup.flatMap(b => b.rooms || []),
+                } : bookingsInGroup[0];
 
-                // Nếu là nhóm đặt phòng (nhiều phòng)
-                if (isGroup && groupBookings.length > 1) {
-                  const earliestStart = new Date(Math.min(...groupBookings.map(b => new Date(b.start_time).getTime())));
-                  const latestEnd = new Date(Math.max(...groupBookings.map(b => new Date(b.end_time).getTime())));
-                  const totalAmount = calculateGroupTotal(groupBookings);
+                const expanded = expandedGroups[groupKey] || false;
 
-                  // Lấy trạng thái chung của nhóm (ưu tiên pending > confirmed > completed > cancelled)
-                  let groupStatus = 'completed';
-                  if (groupBookings.some(b => b.status === 'pending')) groupStatus = 'pending';
-                  else if (groupBookings.some(b => b.status === 'confirmed')) groupStatus = 'confirmed';
-                  else if (groupBookings.some(b => b.status === 'cancelled')) groupStatus = 'cancelled';
-
-                  // Lấy trạng thái thanh toán chung
-                  let paymentStatus: PaymentStatus = 'paid';
-                  if (groupBookings.some(b => isUnpaid(calculatePaymentStatus(b)))) {
-                    paymentStatus = 'unpaid';
-                  } else if (groupBookings.some(b => isPartiallyPaid(calculatePaymentStatus(b)))) {
-                    paymentStatus = 'partially_paid';
-                  }
-
-                  return (
-                    <React.Fragment key={groupKey}>
-                      <TableRow
-                        sx={{
-                          '& > *': { borderBottom: 'unset' },
-                          bgcolor: isExpanded ? 'action.selected' : 'inherit',
-                          cursor: 'pointer'
-                        }}
-                        onClick={() => toggleGroupExpand(groupKey)}
-                      >
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                            <Typography sx={{ ml: 1 }}>#{groupId}</Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            <strong>{groupBookings.length} phòng</strong>
+                return (
+                  <React.Fragment key={groupKey}>
+                    <TableRow
+                      hover
+                      sx={{
+                        cursor: 'pointer',
+                        '& > *': { borderBottom: 'unset' },
+                        bgcolor: expanded ? 'action.selected' : 'inherit',
+                      }}
+                      onClick={() => toggleGroupExpand(groupKey)}
+                    >
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          {(bookingOrGroup.rooms && bookingOrGroup.rooms.length > 0) ? (expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />) : null}
+                          <Typography sx={{ ml: 1 }}>{isGroup ? `#${groupKey.split('-')[1]}` : bookingOrGroup.id?.toString()}</Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        {isGroup ? (
+                          <Typography variant="body2" color="primary">Tổng: {bookingOrGroup.rooms?.length || 0} phòng</Typography>
+                        ) : (
+                          <Typography variant="body2" fontWeight="medium">
+                            {bookingOrGroup.rooms?.[0]?.room_name || 'Chưa xác định'}
                           </Typography>
-                        </TableCell>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Box>
+                          <Typography variant="subtitle2">{formatLocalDateTime(bookingOrGroup.start_time)}</Typography>
+                          <Typography variant="caption" color="text.secondary">đến {formatLocalDateTime(bookingOrGroup.end_time)}</Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          console.log('Booking Room Status:', bookingOrGroup.status);
+                          const status = bookingOrGroup.status;
+                          let label = '';
+                          let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';
+                          if (status === 'cancelled') {
+                            label = 'Đã hủy'; color = 'error';
+                          } else if (status === 'completed') {
+                            label = 'Hoàn thành'; color = 'success';
+                          } else if (bookingOrGroup.payment_status === 'paid') {
+                            label = 'Đã thanh toán'; color = 'success';
+                          } else if (status === 'pending') {
+                            label = 'Chờ xác nhận'; color = 'warning';
+                          } else if (status === 'confirmed') {
+                            label = 'Đã xác nhận';
+                            color = 'primary';
+                          } else {
+                            label = 'Chưa thanh toán'; color = 'error';
+                          }
+                          return <Chip label={label} color={color} size="small" sx={{ fontWeight: 500, fontSize: 13 }} />;
+                        })()}
+                      </TableCell>
+                      <TableCell align="right">{Number(bookingOrGroup.total_amount || 0).toLocaleString()}đ</TableCell>
+                      <TableCell>{bookingOrGroup.notes || 'Không có ghi chú'}</TableCell>
+                      {isPersonal && (
                         <TableCell>
-                          <Box>
-                            <Typography variant="subtitle2">
-                              {formatLocalDateTime(earliestStart.toISOString())}
-                            </Typography>
-                            <Typography variant="caption" color="textSecondary">
-                              đến {formatLocalDateTime(latestEnd.toISOString())}
-                            </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={
-                              groupStatus === 'pending' ? 'Chờ xác nhận' :
-                              groupStatus === 'confirmed' ? 'Đã xác nhận' :
-                              groupStatus === 'completed' ? 'Hoàn thành' :
-                              'Đã hủy'
-                            }
-                            color={
-                              groupStatus === 'pending' ? 'warning' :
-                              groupStatus === 'confirmed' ? 'primary' :
-                              groupStatus === 'completed' ? 'success' :
-                              'error'
-                            }
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          {totalAmount.toLocaleString()}đ
-                        </TableCell>
-                        <TableCell>
-                          {groupBookings[0].notes || 'Không có ghi chú'}
-                        </TableCell>
-                        {isPersonal && (
-                          <TableCell>
+                          {isGroup ? (
                             <Box sx={{ display: 'flex', gap: 0.5 }}>
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Chuyển đến trang chi tiết nhóm đặt phòng
-                                  // history.push(`/booking-groups/${groupId}`);
-                                }}
-                                title="Xem chi tiết"
-                              >
-                                <VisibilityIcon fontSize="small" />
-                              </IconButton>
-
-                              {groupStatus === 'pending' && (
+                              {bookingOrGroup.status === 'pending' && (
                                 <>
                                   <IconButton
                                     size="small"
                                     color="primary"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      // Xác nhận tất cả các đặt phòng trong nhóm
-                                      if (window.confirm('Xác nhận tất cả các đặt phòng trong nhóm này?')) {
-                                        Promise.all(
-                                          groupBookings.map(booking =>
-                                            handleConfirmBooking(Number(booking.id))
-                                          )
-                                        );
-                                      }
+                                      confirmDialog({
+                                        message: 'Xác nhận tất cả các đặt phòng trong nhóm này?'
+                                      }).then(confirmed => {
+                                        if (confirmed) {
+                                          Promise.all(
+                                            bookingsInGroup.map(async booking => {
+                                              await handleConfirmBooking(Number(booking.id));
+                                            })
+                                          );
+                                        }
+                                      });
                                     }}
                                     title="Xác nhận tất cả"
                                   >
@@ -762,14 +810,17 @@ const Bookings = () => {
                                     color="error"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      // Hủy tất cả các đặt phòng trong nhóm
-                                      if (window.confirm('Hủy tất cả các đặt phòng trong nhóm này?')) {
-                                        Promise.all(
-                                          groupBookings.map(booking =>
-                                            handleCancelBooking(Number(booking.id))
-                                          )
-                                        );
-                                      }
+                                      confirmDialog({
+                                        message: 'Hủy tất cả các đặt phòng trong nhóm này?'
+                                      }).then(confirmed => {
+                                        if (confirmed) {
+                                          Promise.all(
+                                            bookingsInGroup.map(async booking => {
+                                              await handleCancelBooking(Number(booking.id));
+                                            })
+                                          );
+                                        }
+                                      });
                                     }}
                                     title="Hủy tất cả"
                                   >
@@ -778,20 +829,24 @@ const Bookings = () => {
                                 </>
                               )}
 
-                              {groupStatus === 'confirmed' && (
+                              {bookingOrGroup.status === 'confirmed' && (
                                 <Tooltip title="Hủy tất cả (có thể phát sinh phí phạt)">
                                   <IconButton
                                     size="small"
                                     color="error"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (window.confirm('Đặt phòng đã được xác nhận. Việc hủy có thể phát sinh phí phạt. Bạn có chắc chắn muốn hủy tất cả?')) {
-                                        Promise.all(
-                                          groupBookings.map(booking =>
-                                            handleCancelBooking(Number(booking.id))
-                                          )
-                                        );
-                                      }
+                                      confirmDialog({
+                                        message: 'Đặt phòng đã được xác nhận. Việc hủy có thể phát sinh phí phạt. Bạn có chắc chắn muốn hủy tất cả?'
+                                      }).then(confirmed => {
+                                        if (confirmed) {
+                                          Promise.all(
+                                            bookingsInGroup.map(async booking => {
+                                              await handleCancelBooking(Number(booking.id));
+                                            })
+                                          );
+                                        }
+                                      });
                                     }}
                                   >
                                     <CancelIcon fontSize="small" />
@@ -799,87 +854,158 @@ const Bookings = () => {
                                 </Tooltip>
                               )}
 
-                              {(groupStatus === 'completed' || groupStatus === 'cancelled') && (
-                                <Typography variant="caption" color="textSecondary">
+                              {(bookingOrGroup.status === 'completed' || bookingOrGroup.status === 'cancelled') && (
+                                <Typography variant="caption" color="text.secondary">
                                   Không có thao tác
                                 </Typography>
                               )}
                             </Box>
-                          </TableCell>
-                        )}
-                      </TableRow>
+                          ) : (
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>{renderBookingActions(bookingOrGroup as BookingWithRoom)}</Box>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
 
-                      {/* Chi tiết các phòng trong nhóm */}
-                      <TableRow>
-                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={isPersonal ? 7 : 6}>
-                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                            <Box sx={{ margin: 1, py: 2 }}>
-                              <Typography variant="h6" gutterBottom component="div">
-                                Chi tiết các phòng
-                              </Typography>
+                    {/* Collapsible content for rooms in the booking/group */}
+                    <TableRow>
+                      <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={isPersonal ? 7 : 6}>
+                        <Collapse in={expanded} timeout="auto" unmountOnExit>
+                          <Box sx={{ margin: 1, py: 2 }}>
+                            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                              {isGroup ? `Chi tiết các phòng trong nhóm ${groupKey.split('-')[1]}` : `Chi tiết phòng #${bookingOrGroup.id}`}
+                            </Typography>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell sx={{ fontWeight: 600 }}>Tên phòng</TableCell>
+                                  <TableCell>Loại</TableCell>
+                                  <TableCell>Thời gian</TableCell>
+                                  <TableCell align="right">Số giờ</TableCell>
+                                  <TableCell align="right">Giá/giờ</TableCell>
+                                  <TableCell align="right">Thành tiền</TableCell>
+                                  <TableCell>Trạng thái</TableCell>
+                                  <TableCell>Thanh toán</TableCell>
+                                  <TableCell>Thao tác</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {(bookingOrGroup.rooms || []).map((room, idx) => {
+                                  const start = (room.start_time && !isNaN(new Date(room.start_time).getTime())) ? new Date(room.start_time) : null;
+                                  const end = (room.end_time && !isNaN(new Date(room.end_time).getTime())) ? new Date(room.end_time) : null;
+                                  const hours = (start && end) ? Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60)) : 0;
 
-                              <Table size="small">
-                                <TableHead>
-                                  <TableRow>
-                                    <TableCell>ID</TableCell>
-                                    <TableCell>Phòng</TableCell>
-                                    <TableCell>Thời gian</TableCell>
-                                    <TableCell>Trạng thái</TableCell>
-                                    <TableCell>Giá tiền</TableCell>
-                                    {isPersonal && <TableCell>Thao tác</TableCell>}
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {groupBookings.map((booking) => (
-                                    <TableRow key={booking.id}>
-                                      <TableCell>{booking.id}</TableCell>
+                                  const pricePerHour = Number(room.price_per_hour); // Đảm bảo là số
+                                  const subtotal = hours * pricePerHour; // Phép tính an toàn
+
+                                  return (
+                                    <TableRow key={room.id || idx}>
+                                      <TableCell>{room.room_name || `Phòng ${room.room_id}`}</TableCell>
+                                      <TableCell>{room.room_type || 'Standard'}</TableCell>
                                       <TableCell>
-                                        {booking.roomName || `Phòng ${booking.room_id}`}
+                                        {(start && end) ?
+                                          `${formatLocalDateTime(start)} - ${formatLocalDateTime(end)}` :
+                                          'N/A'
+                                        }
                                       </TableCell>
+                                      <TableCell align="right">{hours !== 0 ? hours : 'N/A'}</TableCell>
+                                      <TableCell align="right">{pricePerHour !== 0 ? pricePerHour.toLocaleString() + 'đ' : 'N/A'}</TableCell>
+                                      <TableCell align="right">{subtotal !== 0 ? subtotal.toLocaleString() + 'đ' : 'N/A'}</TableCell>
                                       <TableCell>
-                                        {formatLocalDateTime(booking.start_time)} - {formatLocalDateTime(booking.end_time)}
+                                        {(() => {
+                                          console.log('Booking Room Status:', room.status);
+                                          const roomStatus = room.status;
+                                          let label = '';
+                                          let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';
+
+                                          if (roomStatus === 'pending') {
+                                            label = 'Chờ xác nhận';
+                                            color = 'warning';
+                                          } else if (roomStatus === 'completed') {
+                                            label = 'Hoàn thành';
+                                            color = 'success';
+                                          } else if (roomStatus === 'cancelled') {
+                                            label = 'Đã hủy';
+                                            color = 'error';
+                                          } else if (roomStatus === 'confirmed') {
+                                            label = 'Đã xác nhận';
+                                            color = 'primary';
+                                          } else {
+                                            label = 'Không xác định';
+                                            color = 'default';
+                                          }
+
+                                          return (
+                                            <Chip
+                                              label={label}
+                                              color={color}
+                                              size="small"
+                                            />
+                                          );
+                                        })()}
                                       </TableCell>
                                       <TableCell>
                                         <Chip
-                                          label={
-                                            booking.status === 'pending' ? 'Chờ xác nhận' :
-                                            booking.status === 'confirmed' ? 'Đã xác nhận' :
-                                            booking.status === 'completed' ? 'Hoàn thành' :
-                                            'Đã hủy'
-                                          }
-                                          color={
-                                            booking.status === 'pending' ? 'warning' :
-                                            booking.status === 'confirmed' ? 'primary' :
-                                            booking.status === 'completed' ? 'success' :
-                                            'error'
-                                          }
+                                          label={room.payment_status ? (
+                                            room.payment_status === 'unpaid' ? 'Chưa thanh toán'
+                                            : room.payment_status === 'partially_paid' ? 'Đã thanh toán một phần'
+                                            : room.payment_status === 'paid' ? 'Đã thanh toán'
+                                            : 'Không xác định'
+                                          ) : 'N/A'}
+                                          color={room.payment_status === 'unpaid' ? 'error'
+                                            : room.payment_status === 'partially_paid' ? 'warning'
+                                            : room.payment_status === 'paid' ? 'success'
+                                            : 'default' as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'}
                                           size="small"
+                                          sx={{ fontWeight: 500, fontSize: 12 }}
                                         />
                                       </TableCell>
                                       <TableCell>
-                                        {Number(booking.total_amount).toLocaleString()}đ
+                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                          {room.status === 'pending' && (
+                                            <IconButton
+                                              size="small"
+                                              color="primary"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleConfirmIndividualBookingRoom(Number(room.id), Number(bookingOrGroup.id));
+                                              }}
+                                              title="Xác nhận phòng này"
+                                            >
+                                              <CheckCircleIcon fontSize="small" />
+                                            </IconButton>
+                                          )}
+                                          {(room.status === 'pending' || room.status === 'confirmed') && (
+                                            <IconButton
+                                              size="small"
+                                              color="error"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCancelIndividualBookingRoom(Number(room.id), Number(bookingOrGroup.id));
+                                              }}
+                                              title="Hủy phòng này"
+                                            >
+                                              <CancelIcon fontSize="small" />
+                                            </IconButton>
+                                          )}
+                                          {(room.status === 'completed' || room.status === 'cancelled') && (
+                                            <Typography variant="caption" color="text.secondary">
+                                              Không có thao tác
+                                            </Typography>
+                                          )}
+                                        </Box>
                                       </TableCell>
-                                      {isPersonal && (
-                                        <TableCell>
-                                          <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                            {renderBookingActions(booking)}
-                                          </Box>
-                                        </TableCell>
-                                      )}
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </Box>
-                          </Collapse>
-                        </TableCell>
-                      </TableRow>
-                    </React.Fragment>
-                  );
-                } else {
-                  // Nếu là đặt phòng đơn lẻ
-                  return renderBookingRow(groupBookings[0], isPersonal);
-                }
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </Box>
+                        </Collapse>
+                      </TableCell>
+                    </TableRow>
+                  </React.Fragment>
+                );
               })
             )}
           </TableBody>
@@ -887,102 +1013,6 @@ const Bookings = () => {
       </TableContainer>
     );
   };
-
-  // Helper function to render a single booking row
-  const renderBookingRow = (booking: BookingWithRoom, isPersonal: boolean) => (
-    <TableRow key={booking.id}>
-      <TableCell>{booking.id?.toString()}</TableCell>
-      <TableCell>
-        {booking.rooms && booking.rooms.length > 0 ? (
-          // Display multiple rooms
-          <Box>
-            {booking.rooms.map((room: any, index) => (
-              <Box key={room.room_id || index} sx={{ mb: index < (booking.rooms?.length || 0) - 1 ? 1 : 0 }}>
-                <Typography variant="body2" fontWeight="medium">
-                  {room.room_name || `Phòng ${room.room_id}`}
-                </Typography>
-                <Typography variant="caption" color="textSecondary" display="block">
-                  Loại: {room.room_type || 'Standard'}
-                </Typography>
-              </Box>
-            ))}
-            {booking.rooms.length > 1 && (
-              <Typography variant="caption" color="primary" display="block" sx={{ mt: 0.5 }}>
-                Tổng: {booking.rooms.length} phòng
-              </Typography>
-            )}
-          </Box>
-        ) : (
-          // Fallback for old data structure
-          <Box>
-            <Typography variant="body2" fontWeight="medium">
-              {booking.roomName || `Phòng ${booking.room_id}`}
-            </Typography>
-            {booking.roomType && (
-              <Typography variant="caption" color="textSecondary" display="block">
-                Loại: {booking.roomType}
-              </Typography>
-            )}
-          </Box>
-        )}
-      </TableCell>
-      <TableCell>
-        <Box>
-          <Typography variant="subtitle2">
-            {formatLocalDateTime(booking.start_time)}
-          </Typography>
-          <Typography variant="caption" color="textSecondary">
-            đến {formatLocalDateTime(booking.end_time)}
-          </Typography>
-        </Box>
-      </TableCell>
-      <TableCell>
-        {(() => {
-          const paymentStatus = calculatePaymentStatus(booking);
-
-          // Hiển thị status dựa trên payment status và booking status
-          let label = '';
-          let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';
-
-          if (booking.status === 'cancelled') {
-            label = 'Đã hủy';
-            color = 'error';
-          } else if (booking.status === 'completed') {
-            label = 'Hoàn thành';
-            color = 'success';
-          } else if (paymentStatus === 'paid') {
-            label = 'Đã thanh toán';
-            color = 'success';
-          } else if (booking.status === 'pending') {
-            label = 'Chờ xác nhận';
-            color = 'warning';
-          } else {
-            label = 'Chưa thanh toán';
-            color = 'error';
-          }
-
-          return (
-            <Chip
-              label={label}
-              color={color}
-              size="small"
-            />
-          );
-        })()}
-      </TableCell>
-      <TableCell>
-        {Number(booking.total_amount || 0).toLocaleString()}đ
-      </TableCell>
-      <TableCell>{booking.notes || 'Không có ghi chú'}</TableCell>
-      {isPersonal && (
-        <TableCell>
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            {renderBookingActions(booking)}
-          </Box>
-        </TableCell>
-      )}
-    </TableRow>
-  );
 
   // Helper function to render booking actions based on status
   const renderBookingActions = (booking: BookingWithRoom) => {
@@ -1018,8 +1048,8 @@ const Bookings = () => {
       );
     }
 
-    // Nút thanh toán cho đặt phòng đã xác nhận
-    if (booking.status === 'confirmed') {
+    // Nút thanh toán cho đặt phòng đã xác nhận VÀ cần thanh toán
+    if (needsPayment(calculatePaymentStatus(booking))) {
       actions.push(
         <Button
           key="checkout"
@@ -1028,15 +1058,22 @@ const Bookings = () => {
           size="small"
           onClick={() => {
             // Chuyển đến trang thanh toán với ID đặt phòng
-            window.location.href = `/checkout/${booking.id}`;
+            console.log('Attempting to navigate to checkout for booking ID:', booking.id);
+            if (booking.id) {
+              window.location.href = `/checkout/${booking.id}`;
+            } else {
+              console.error('Booking ID is undefined, cannot navigate to checkout.');
+            }
           }}
           sx={{ mr: 1 }}
         >
           Thanh toán
         </Button>
       );
+    }
 
-      // Nút gia hạn cho đặt phòng đã xác nhận
+    // Nút gia hạn chỉ cho đặt phòng đã xác nhận VÀ đã thanh toán hoặc thanh toán một phần
+    if (booking.status === 'confirmed' && (isPaid(calculatePaymentStatus(booking)) || isPartiallyPaid(calculatePaymentStatus(booking)))) {
       actions.push(
         <Button
           key="extend"
@@ -1049,11 +1086,13 @@ const Bookings = () => {
           Gia hạn
         </Button>
       );
+    }
 
-      // Nút hủy cho đặt phòng đã xác nhận
+    // Nút hủy cho đặt phòng đã xác nhận (không quan tâm trạng thái thanh toán)
+    if (booking.status === 'confirmed') {
       actions.push(
         <Button
-          key="cancel"
+          key="cancel-confirmed"
           variant="outlined"
           color="error"
           size="small"
@@ -1344,7 +1383,8 @@ const Bookings = () => {
                         <TableRow>
                           <TableCell>Tên phòng</TableCell>
                           <TableCell>Loại</TableCell>
-                          <TableCell>Sức chứa</TableCell>
+                          <TableCell>Thời gian</TableCell>
+                          <TableCell align="right">Số giờ</TableCell>
                           <TableCell align="right">Giá/giờ</TableCell>
                           <TableCell align="right">Thành tiền</TableCell>
                         </TableRow>
@@ -1354,11 +1394,12 @@ const Bookings = () => {
                           <TableRow key={room.id}>
                             <TableCell>{room.name}</TableCell>
                             <TableCell>{room.type || 'Standard'}</TableCell>
-                            <TableCell>{room.capacity} người</TableCell>
-                            <TableCell align="right">{room.price_per_hour?.toLocaleString()}đ</TableCell>
-                            <TableCell align="right">
-                              {((room.price_per_hour || 0) * bookingHours).toLocaleString()}đ
+                            <TableCell>
+                              {formatLocalDateTime(bookingTime.start_time)} - {formatLocalDateTime(bookingTime.end_time)}
                             </TableCell>
+                            <TableCell align="right">{bookingHours}</TableCell>
+                            <TableCell align="right">{Number(room.price_per_hour).toLocaleString()}đ</TableCell>
+                            <TableCell align="right">{Number(room.price_per_hour * bookingHours).toLocaleString()}đ</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1425,50 +1466,50 @@ const Bookings = () => {
 
   // Thêm các hàm xử lý cho dialog
   const handleExtendSubmit = async () => {
-    if (!selectedBookingId) return;
+    // if (!selectedBookingId) return;
 
-    try {
-      setLoading(true);
+    // try {
+    //   setLoading(true);
 
-      // Tìm booking trong danh sách
-      const booking = allBookings.find(b => b.id === selectedBookingId);
-      if (!booking) {
-        setError('Không tìm thấy thông tin đặt phòng');
-        return;
-      }
+    //   // Tìm booking trong danh sách
+    //   const booking = allBookings.find(b => b.id === selectedBookingId);
+    //   if (!booking) {
+    //     setError('Không tìm thấy thông tin đặt phòng');
+    //     return;
+    //   }
 
-      // Tính thời gian kết thúc mới
-      const currentEndTime = new Date(booking.end_time);
-      const newEndTime = new Date(currentEndTime.getTime() + (extendHours * 60 * 60 * 1000));
+    //   // Tính thời gian kết thúc mới
+    //   const currentEndTime = new Date(booking.end_time);
+    //   const newEndTime = new Date(currentEndTime.getTime() + (extendHours * 60 * 60 * 1000));
 
-      // Tìm thông tin phòng
-      const room = rooms.find(r => r.id === booking.room_id);
-      if (!room) {
-        setError('Không tìm thấy thông tin phòng');
-        return;
-      }
+    //   // Tìm thông tin phòng
+    //   const room = rooms.find(r => r.id === booking.room_id);
+    //   if (!room) {
+    //     setError('Không tìm thấy thông tin phòng');
+    //     return;
+    //   }
 
-      // Tính thêm tiền
-      const additionalAmount = extendHours * room.price_per_hour;
-      const newTotalAmount = Number(booking.total_amount) + additionalAmount;
+    //   // Tính thêm tiền
+    //   const additionalAmount = extendHours * room.price_per_hour;
+    //   const newTotalAmount = Number(booking.total_amount) + additionalAmount;
 
-      // Gọi API để gia hạn
-      const response = await bookingService.extendBooking(
-        selectedBookingId,
-        newEndTime,
-        newTotalAmount
-      );
+    //   // Gọi API để gia hạn
+    //   const response = await bookingService.extendBooking(
+    //     selectedBookingId,
+    //     newEndTime,
+    //     newTotalAmount
+    //   );
 
-      if (response.success) {
-        setExtendDialogOpen(false);
-        await loadBookings();
-      }
-    } catch (err: any) {
-      console.error('Error extending booking:', err);
-      setError(err.response?.data?.message || 'Lỗi khi gia hạn đặt phòng');
-    } finally {
-      setLoading(false);
-    }
+    //   if (response.success) {
+    //     setExtendDialogOpen(false);
+    //     await loadBookings();
+    //   }
+    // } catch (err: any) {
+    //   console.error('Error extending booking:', err);
+    //   setError(err.response?.data?.message || 'Lỗi khi gia hạn đặt phòng');
+    // } finally {
+    //   setLoading(false);
+    // }
   };
 
   // Add this function to handle payment for a booking
@@ -1522,6 +1563,42 @@ const Bookings = () => {
 
     // Mặc định là chưa thanh toán
     return 'unpaid';
+  };
+
+  const handleConfirmIndividualBookingRoom = async (roomBookingId: number, bookingId: number) => {
+    try {
+      const response = await bookingService.confirmBookingRoom(roomBookingId);
+      if (response.success) {
+        notifySuccess('Xác nhận phòng thành công!');
+        // Sau khi xác nhận phòng con, kiểm tra và xác nhận booking mẹ nếu nó đang ở trạng thái pending
+        const parentBooking = allBookings.find(b => b.id === bookingId);
+        if (parentBooking && parentBooking.status === 'pending') {
+          // Chỉ cập nhật trạng thái của booking mẹ, không xác nhận các booking room khác của nó
+          await bookingService.updateBooking(bookingId, { status: 'confirmed' });
+        }
+        loadBookings(); // Tải lại danh sách bookings để cập nhật trạng thái
+      } else {
+        notifyError(response.message || 'Lỗi khi xác nhận phòng.');
+      }
+    } catch (err: any) {
+      console.error('Error confirming individual booking room:', err);
+      notifyError('Lỗi khi xác nhận phòng.');
+    }
+  };
+
+  const handleCancelIndividualBookingRoom = async (roomBookingId: number, bookingId: number) => {
+    try {
+      const response = await bookingService.cancelBookingRoom(roomBookingId);
+      if (response.success) {
+        notifySuccess('Hủy phòng thành công!');
+        loadBookings(); // Tải lại danh sách bookings để cập nhật trạng thái
+      } else {
+        notifyError(response.message || 'Lỗi khi hủy phòng.');
+      }
+    } catch (err: any) {
+      console.error('Error canceling individual booking room:', err);
+      notifyError('Lỗi khi hủy phòng.');
+    }
   };
 
   return (

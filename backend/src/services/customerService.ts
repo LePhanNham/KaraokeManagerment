@@ -1,16 +1,16 @@
 import { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
-import Customer from '../models/Customer';
+import User from '../models/Customer';
 import database from '../config/database';
 import bcrypt from 'bcrypt';
 
-interface CustomerRow extends RowDataPacket, Customer {}
+interface CustomerRow extends RowDataPacket, User {}
 
 class CustomerService {
     private get db(): Pool {
         return database.getPool();
     }
 
-    async createCustomer(customerData: Partial<Customer>): Promise<Customer> {
+    async createCustomer(customerData: any): Promise<any> {
         if (!this.validateCustomerData(customerData)) {
             throw new Error('Invalid customer data');
         }
@@ -40,7 +40,7 @@ class CustomerService {
         }
     }
 
-    private validateCustomerData(customerData: Partial<Customer>): boolean {
+    private validateCustomerData(customerData: any): boolean {
         return !!(customerData.username &&
                  customerData.password &&
                  customerData.email &&
@@ -52,14 +52,14 @@ class CustomerService {
         return emailRegex.test(email);
     }
 
-    private async ensureCustomer(customer: Customer | null): Promise<Customer> {
+    private async ensureCustomer(customer: any | null): Promise<any> {
         if (!customer) {
             throw new Error('Customer not found');
         }
         return customer;
     }
 
-    async getCustomerByUsername(username: string): Promise<Customer | null> {
+    async getCustomerByUsername(username: string): Promise<any | null> {
         const [rows] = await this.db.execute<CustomerRow[]>(
             'SELECT * FROM customers WHERE username = ?',
             [username]
@@ -67,7 +67,7 @@ class CustomerService {
         return rows[0] || null;
     }
 
-    async getCustomerById(id: number): Promise<Customer> {
+    async getCustomerById(id: number): Promise<any> {
         const [rows] = await this.db.execute<CustomerRow[]>(
             'SELECT * FROM customers WHERE id = ?',
             [id]
@@ -87,7 +87,7 @@ class CustomerService {
         }
     }
 
-    async updateCustomer(id: number, updateData: Partial<Customer>): Promise<Customer> {
+    async updateCustomer(id: number, updateData: any): Promise<any> {
         // Remove sensitive fields from update
         delete updateData.password;
         delete updateData.created_at;
@@ -126,7 +126,7 @@ class CustomerService {
         }
     }
 
-    async getAllCustomers(): Promise<Customer[]> {
+    async getAllCustomers(): Promise<any[]> {
         try {
             const [rows] = await this.db.execute<CustomerRow[]>(
                 'SELECT id, username, name, email, phone_number, created_at, updated_at FROM customers'

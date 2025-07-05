@@ -235,80 +235,21 @@ export const bookingService = {
 
   cancelBooking: async (id: number): Promise<ApiResponse<Booking>> => {
     try {
-      const response = await api.put<ApiResponse<Booking>>(`/bookings/${id}`, {
-        status: 'cancelled'
-      }, {
-        timeout: 10000
-      });
+      const response = await api.put<ApiResponse<Booking>>(`/bookings/${id}/cancel`);
       return response.data;
     } catch (error: any) {
-      console.error('Error cancelling booking:', error);
-
-      const errorResponse = {
-        success: false,
-        message: 'Failed to cancel booking',
-        error: error
-      };
-
-      if (error.response) {
-        errorResponse.message = error.response.data?.message ||
-                               `Server error: ${error.response.status}`;
-      } else if (error.request) {
-        errorResponse.message = 'No response received from server';
-      } else {
-        errorResponse.message = error.message || 'Unknown error occurred';
-      }
-
-      throw errorResponse;
+      console.error(`Error cancelling booking ${id}:`, error);
+      throw error;
     }
   },
 
-  completeBooking: async (id: number, endTime?: Date, totalAmount?: number): Promise<ApiResponse<Booking>> => {
+  completeBooking: async (id: number): Promise<ApiResponse<Booking>> => {
     try {
-      const data: Partial<BookingInput> = {
-        status: 'completed'
-      };
-
-      if (endTime) {
-        // Format date to MySQL compatible format (YYYY-MM-DD HH:MM:SS)
-        const year = endTime.getFullYear();
-        const month = String(endTime.getMonth() + 1).padStart(2, '0');
-        const day = String(endTime.getDate()).padStart(2, '0');
-        const hours = String(endTime.getHours()).padStart(2, '0');
-        const minutes = String(endTime.getMinutes()).padStart(2, '0');
-        const seconds = String(endTime.getSeconds()).padStart(2, '0');
-
-        data.end_time = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-      }
-
-      if (totalAmount !== undefined) {
-        data.total_amount = totalAmount;
-      }
-
-      const response = await api.put<ApiResponse<Booking>>(`/bookings/${id}`, data, {
-        timeout: 15000,
-      });
-
+      const response = await api.put<ApiResponse<Booking>>(`/bookings/${id}/complete`);
       return response.data;
     } catch (error: any) {
-      console.error('Error completing booking:', error);
-
-      const errorResponse = {
-        success: false,
-        message: 'Không thể trả phòng',
-        error: error
-      };
-
-      if (error.response) {
-        errorResponse.message = error.response.data?.message ||
-                               `Lỗi máy chủ: ${error.response.status}`;
-      } else if (error.request) {
-        errorResponse.message = 'Không nhận được phản hồi từ máy chủ';
-      } else {
-        errorResponse.message = error.message || 'Đã xảy ra lỗi không xác định';
-      }
-
-      throw errorResponse;
+      console.error(`Error completing booking ${id}:`, error);
+      throw error;
     }
   },
 
@@ -578,17 +519,12 @@ export const bookingService = {
     }
   },
 
-  extendBooking: async (
-    id: number,
-    newEndTime: Date,
-    newTotalAmount: number
-  ): Promise<ApiResponse<Booking>> => {
+  extendBooking: async (id: number, hours: number): Promise<ApiResponse<Booking>> => {
     try {
       const response = await api.put<ApiResponse<Booking>>(
         `/bookings/${id}/extend`,
         {
-          end_time: newEndTime.toISOString(),
-          total_amount: newTotalAmount
+          hours
         }
       );
 
@@ -823,6 +759,36 @@ export const bookingService = {
         message: error.message || 'Không thể ghi nhận thanh toán',
         error
       };
+    }
+  },
+
+  confirmBooking: async (id: number): Promise<ApiResponse<Booking>> => {
+    try {
+      const response = await api.put<ApiResponse<Booking>>(`/bookings/${id}/confirm`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error confirming booking ${id}:`, error);
+      throw error;
+    }
+  },
+
+  confirmBookingRoom: async (roomBookingId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await api.put<ApiResponse<any>>(`/booking-rooms/${roomBookingId}/confirm`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error confirming booking room ${roomBookingId}:`, error);
+      throw error;
+    }
+  },
+
+  cancelBookingRoom: async (roomBookingId: number): Promise<ApiResponse<any>> => {
+    try {
+      const response = await api.put<ApiResponse<any>>(`/booking-rooms/${roomBookingId}/cancel`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error cancelling booking room ${roomBookingId}:`, error);
+      throw error;
     }
   }
 };

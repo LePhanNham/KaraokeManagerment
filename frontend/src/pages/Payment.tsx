@@ -86,6 +86,7 @@ const Payment: React.FC = () => {
           console.log(`    price_per_hour: ${room.price_per_hour} (${typeof room.price_per_hour})`);
           console.log(`    hours: ${room.hours} (${typeof room.hours})`);
           console.log(`    subtotal: ${room.subtotal} (${typeof room.subtotal})`);
+          console.log(`    status: ${room.booking_room_status}`);
         });
 
         const roomsTotal = booking.rooms.reduce((sum, room) => sum + Number(room.subtotal), 0);
@@ -550,6 +551,34 @@ const Payment: React.FC = () => {
                 Booking #{selectedBooking.id} - {selectedBooking.customer_name}
               </Alert>
 
+              {/* Bảng chi tiết các phòng sẽ thanh toán */}
+              <TableContainer component={Paper} sx={{ mb: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Tên phòng</TableCell>
+                      <TableCell>Loại</TableCell>
+                      <TableCell>Thời gian</TableCell>
+                      <TableCell align="right">Số giờ</TableCell>
+                      <TableCell align="right">Giá/giờ</TableCell>
+                      <TableCell align="right">Thành tiền</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {selectedBooking.rooms.map(room => (
+                      <TableRow key={room.id}>
+                        <TableCell>{room.room_name}</TableCell>
+                        <TableCell>{room.room_type}</TableCell>
+                        <TableCell>{room.hours}h</TableCell>
+                        <TableCell align="right">{room.hours}</TableCell>
+                        <TableCell align="right">{paymentService.formatPrice(room.price_per_hour)}</TableCell>
+                        <TableCell align="right">{paymentService.formatPrice(room.subtotal)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <TextField
@@ -619,19 +648,42 @@ const Payment: React.FC = () => {
                 Thanh toán {selectedRooms.size} phòng từ {getSelectedBookingsCount()} booking khác nhau
               </Alert>
 
-              {/* Show selected rooms summary */}
+              {/* Bảng chi tiết các phòng sẽ thanh toán, nhóm theo booking */}
               <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                  Danh sách phòng đã chọn:
-                </Typography>
-                {getSelectedRoomsSummary().map((item, index) => (
-                  <Box key={index} sx={{ mb: 1, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                    <Typography variant="body2" fontWeight="bold">
+                {getSelectedRoomsSummary().map((item, idx) => (
+                  <Box key={idx} sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1 }}>
                       Booking #{item.bookingId} - {item.customerName}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {item.rooms.map(r => r.room_name).join(', ')} - {paymentService.formatPrice(item.total)}
-                    </Typography>
+                    <TableContainer component={Paper}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Tên phòng</TableCell>
+                            <TableCell>Loại</TableCell>
+                            <TableCell align="right">Số giờ</TableCell>
+                            <TableCell align="right">Giá/giờ</TableCell>
+                            <TableCell align="right">Thành tiền</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {item.rooms.map(room => (
+                            <TableRow key={room.id}>
+                              <TableCell>{room.room_name}</TableCell>
+                              <TableCell>{room.room_type}</TableCell>
+                              <TableCell align="right">{room.hours}</TableCell>
+                              <TableCell align="right">{paymentService.formatPrice(room.price_per_hour)}</TableCell>
+                              <TableCell align="right">{paymentService.formatPrice(room.subtotal)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <Box sx={{ textAlign: 'right', mt: 1 }}>
+                      <Typography variant="body2" fontWeight="bold">
+                        Tổng booking #{item.bookingId}: {paymentService.formatPrice(item.total)}
+                      </Typography>
+                    </Box>
                   </Box>
                 ))}
               </Box>

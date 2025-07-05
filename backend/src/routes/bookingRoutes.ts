@@ -1,4 +1,3 @@
-
 import { Router } from 'express';
 import BookingController from '../controllers/bookingController';
 
@@ -13,6 +12,7 @@ router.post('/', bookingController.createBooking.bind(bookingController));
 router.get('/', bookingController.getAllBookings.bind(bookingController));
 router.get('/:id', bookingController.getBooking.bind(bookingController));
 router.put('/:id', bookingController.updateBooking.bind(bookingController));
+router.put('/:id/confirm', bookingController.confirmBooking.bind(bookingController));
 router.delete('/:id', bookingController.deleteBooking.bind(bookingController));
 
 // Route cho đặt nhiều phòng

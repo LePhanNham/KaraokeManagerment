@@ -167,12 +167,10 @@ export const roomsPageService = {
 
       // Filter by search
       if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        const nameMatch = room.name.toLowerCase().includes(searchLower);
+        const searchLower = filters.search.toLowerCase();        const nameMatch = room.name.toLowerCase().includes(searchLower);
         const typeMatch = room.type.toLowerCase().includes(searchLower);
-        const descMatch = room.description?.toLowerCase().includes(searchLower);
-        
-        if (!nameMatch && !typeMatch && !descMatch) {
+
+        if (!nameMatch && !typeMatch) {
           return false;
         }
       }

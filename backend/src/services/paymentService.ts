@@ -131,11 +131,13 @@ export default class PaymentService {
                             r.name as room_name,
                             r.type as room_type,
                             br.price_per_hour,
+                            br.status as booking_room_status,
                             TIMESTAMPDIFF(HOUR, ?, ?) as hours,
                             (TIMESTAMPDIFF(HOUR, ?, ?) * br.price_per_hour) as subtotal
                         FROM booking_rooms br
                         LEFT JOIN rooms r ON br.room_id = r.id
                         WHERE br.booking_id = ?
+                        AND br.status = 'confirmed'
                         AND NOT EXISTS (
                             SELECT 1 FROM payments p
                             WHERE p.booking_room_id = br.id

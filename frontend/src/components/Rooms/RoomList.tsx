@@ -1,30 +1,26 @@
-import React from 'react';
-import { Grid } from '@mui/material';
-import RoomCard from './RoomCard';
-
-interface Room {
-  id: number;
-  name: string;
-  capacity: number;
-  status: string;
-}
+import type React from "react"
+import type { Room } from "../../types/interfaces"
+import RoomCard from "./RoomCard"
 
 interface RoomListProps {
-  rooms: Room[];
-  onEdit: (id: number) => void;
-  onDelete: (id: number) => void;
+  rooms: Room[]
+  onEdit: (id: number) => void
+  onDelete: (id: number) => void
 }
 
 const RoomList: React.FC<RoomListProps> = ({ rooms, onEdit, onDelete }) => {
   return (
-    <Grid container spacing={3}>
-      {rooms.map(room => (
-        <Grid item xs={12} sm={6} md={4} key={room.id}>
-          <RoomCard {...room} onEdit={onEdit} onDelete={onDelete} />
-        </Grid>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {rooms.map((room) => (
+        <RoomCard
+          key={room.id}
+          room={room}
+          onEdit={() => room.id && onEdit(room.id)}
+          onDelete={() => room.id && onDelete(room.id)}
+        />
       ))}
-    </Grid>
-  );
-};
+    </div>
+  )
+}
 
-export default RoomList;
+export default RoomList

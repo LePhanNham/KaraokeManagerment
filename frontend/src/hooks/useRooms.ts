@@ -5,6 +5,9 @@ import roomsPageService, {
   RoomFormData, 
   RoomFilters 
 } from '../services/roomsPageService';
+import axios from 'axios';
+
+const API_URL = 'http://localhost:5000/api'; // Thay đổi port nếu cần
 
 export const useRooms = () => {
   const { notifySuccess, notifyError } = useNotification();
@@ -55,7 +58,7 @@ export const useRooms = () => {
     try {
       setLoading(true);
       setError('');
-      const roomsData = await roomsPageService.getAllRooms();
+      const roomsData = await fetchRooms();
       setRooms(roomsData);
     } catch (error: any) {
       setError(error.message);
@@ -65,201 +68,90 @@ export const useRooms = () => {
     }
   };
 
-  const handleCreateRoom = async () => {
-    // Validate form data
-    const validationError = roomsPageService.validateRoomData(formData);
-    if (validationError) {
-      setFormErrors({ general: validationError });
-      return;
-    }
-
+  const fetchRooms = async () => {
     try {
-      setLoading(true);
-      await roomsPageService.createRoom(formData);
-      notifySuccess('Tạo phòng mới thành công');
-      await loadRooms();
-      handleCloseDialog();
+      const response = await axios.get<Room[]>(`${API_URL}/rooms`);
+      setRooms(response.data);
+      return response.data;
     } catch (error: any) {
-      setFormErrors({ general: error.message });
-      notifyError(error.message);
-    } finally {
-      setLoading(false);
+      setError(error.message);
+      throw error;
     }
   };
 
-  const handleUpdateRoom = async () => {
-    if (!selectedRoom?.id) return;
-
-    // Validate form data
-    const validationError = roomsPageService.validateRoomData(formData);
-    if (validationError) {
-      setFormErrors({ general: validationError });
-      return;
-    }
-
+  const createRoom = async (roomData: Omit<Room, 'id'>) => {
     try {
-      setLoading(true);
-      await roomsPageService.updateRoom(selectedRoom.id, formData);
-      notifySuccess('Cập nhật phòng thành công');
-      await loadRooms();
-      handleCloseDialog();
+      const response = await axios.post<Room>(`${API_URL}/rooms`, roomData);
+      await fetchRooms();
+      return response.data;
     } catch (error: any) {
-      setFormErrors({ general: error.message });
-      notifyError(error.message);
-    } finally {
-      setLoading(false);
+      setError(error.message);
+      throw error;
     }
   };
 
-  const handleDeleteRoom = async () => {
-    if (!roomToDelete?.id) return;
-
+  const updateRoom = async (id: number, roomData: Partial<Room>) => {
     try {
-      setLoading(true);
-      await roomsPageService.deleteRoom(roomToDelete.id);
-      notifySuccess('Xóa phòng thành công');
-      await loadRooms();
-      setShowDeleteDialog(false);
-      setRoomToDelete(null);
+      const response = await axios.put<Room>(`${API_URL}/rooms/${id}`, roomData);
+      await fetchRooms();
+      return response.data;
     } catch (error: any) {
-      notifyError(error.message);
-    } finally {
-      setLoading(false);
+      setError(error.message);
+      throw error;
     }
   };
 
-  // Dialog handlers
-  const handleOpenCreateDialog = () => {
-    setSelectedRoom(null);
-    setFormData(roomsPageService.getDefaultFormData());
-    setFormErrors({});
-    setShowDialog(true);
-  };
-
-  const handleOpenEditDialog = (room: Room) => {
-    setSelectedRoom(room);
-    setFormData({
-      name: room.name,
-      type: room.type,
-      capacity: room.capacity,
-      price_per_hour: room.price_per_hour,
-      description: room.description || ''
-    });
-    setFormErrors({});
-    setShowDialog(true);
-  };
-
-  const handleCloseDialog = () => {
-    setSelectedRoom(null);
-    setFormData(roomsPageService.getDefaultFormData());
-    setFormErrors({});
-    setShowDialog(false);
-  };
-
-  const handleOpenDeleteDialog = (room: Room) => {
-    setRoomToDelete(room);
-    setShowDeleteDialog(true);
-  };
-
-  const handleCloseDeleteDialog = () => {
-    setRoomToDelete(null);
-    setShowDeleteDialog(false);
-  };
-
-  // Form handlers
-  const handleFormChange = (field: keyof RoomFormData, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-
-    // Clear field error when user starts typing
-    if (formErrors[field]) {
-      setFormErrors(prev => ({
-        ...prev,
-        [field]: ''
-      }));
+  const deleteRoom = async (id: number) => {
+    try {
+      await axios.delete(`${API_URL}/rooms/${id}`);
+      await fetchRooms();
+    } catch (error: any) {
+      setError(error.message);
+      throw error;
     }
-  };
-
-  const handleSubmit = () => {
-    if (selectedRoom) {
-      handleUpdateRoom();
-    } else {
-      handleCreateRoom();
-    }
-  };
-
-  // Filter handlers
-  const handleFilterChange = (field: keyof RoomFilters, value: any) => {
-    setFilters(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleClearFilters = () => {
-    setFilters(roomsPageService.getDefaultFilters());
-  };
-
-  // Sort handlers
-  const handleSort = (field: string) => {
-    if (sortBy === field) {
-      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortOrder('asc');
-    }
-  };
-
-  // Utility functions
-  const formatPrice = roomsPageService.formatPrice;
-
-  const clearError = () => {
-    setError('');
-  };
-
-  const isFormValid = () => {
-    return roomsPageService.validateRoomData(formData) === null;
   };
 
   return {
-    // States
+    // State
     rooms,
-    filteredAndSortedRooms,
     loading,
     error,
     selectedRoom,
+    setSelectedRoom,
     showDialog,
+    setShowDialog,
     showDeleteDialog,
+    setShowDeleteDialog,
     roomToDelete,
+    setRoomToDelete,
+    
+    // Form state
     formData,
+    setFormData,
     formErrors,
+    setFormErrors,
+
+    // Filter state
     filters,
+    setFilters,
     sortBy,
+    setSortBy,
     sortOrder,
+    setSortOrder,
+
+    // Computed values
+    filteredAndSortedRooms,
     roomTypes,
     roomStats,
 
-    // Actions
-    loadRooms,
-    handleCreateRoom,
-    handleUpdateRoom,
-    handleDeleteRoom,
-    handleOpenCreateDialog,
-    handleOpenEditDialog,
-    handleCloseDialog,
-    handleOpenDeleteDialog,
-    handleCloseDeleteDialog,
-    handleFormChange,
-    handleSubmit,
-    handleFilterChange,
-    handleClearFilters,
-    handleSort,
-    clearError,
+    // API functions
+    fetchRooms,
+    createRoom,
+    updateRoom,
+    deleteRoom,
 
-    // Utilities
-    formatPrice,
-    isFormValid
+    // Utility functions
+    loadRooms,
+    isFormValid: () => roomsPageService.validateRoomData(formData) === null
   };
 };

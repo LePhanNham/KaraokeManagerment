@@ -5,34 +5,28 @@ export type PaymentStatus = 'unpaid' | 'partially_paid' | 'paid';
 
 // Hàm tính toán trạng thái thanh toán
 export const calculatePaymentStatus = (booking: BookingWithRoom): PaymentStatus => {
-  // Nếu không có total_amount hoặc total_amount = 0, không cần thanh toán
-  if (!booking.total_amount || booking.total_amount <= 0) {
-    return 'paid';
-  }
-
   // Nếu booking đã hủy, không cần thanh toán
   if (booking.status === 'cancelled') {
     return 'paid';
   }
 
-  // Sử dụng payment_status từ backend nếu có
-  if (booking.payment_status) {
-    return booking.payment_status;
+  // Tính toán trạng thái thanh toán dựa trên các booking_room
+  const confirmedRooms = booking.rooms?.filter(room => room.status === 'confirmed') || [];
+  const paidRooms = confirmedRooms.filter(room => room.payment_status === 'paid').length;
+  const totalConfirmedRooms = confirmedRooms.length;
+
+  if (totalConfirmedRooms === 0) {
+    // Nếu không có phòng nào được xác nhận, coi như chưa cần thanh toán
+    return 'unpaid';
   }
 
-  // Fallback: tính toán dựa trên total_rooms và paid_rooms
-  if (booking.total_rooms && booking.paid_rooms !== undefined) {
-    if (booking.paid_rooms >= booking.total_rooms) {
-      return 'paid';
-    } else if (booking.paid_rooms > 0) {
-      return 'partially_paid';
-    } else {
-      return 'unpaid';
-    }
+  if (paidRooms >= totalConfirmedRooms) {
+    return 'paid';
+  } else if (paidRooms > 0) {
+    return 'partially_paid';
+  } else {
+    return 'unpaid';
   }
-
-  // Mặc định là chưa thanh toán
-  return 'unpaid';
 };
 
 // Hàm kiểm tra xem trạng thái thanh toán có phải là "unpaid" không

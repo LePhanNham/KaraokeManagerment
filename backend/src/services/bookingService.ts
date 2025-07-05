@@ -134,7 +134,11 @@ export class BookingService {
                         br.room_id,
                         r.name as room_name,
                         r.type as room_type,
-                        br.price_per_hour
+                        br.price_per_hour,
+                        br.start_time,
+                        br.end_time,
+                        br.status,
+                        br.payment_status
                     FROM booking_rooms br
                     JOIN rooms r ON br.room_id = r.id
                     WHERE br.booking_id = ?
@@ -181,7 +185,7 @@ export class BookingService {
         }
     }
 
-    async updateBooking(id: number, updateData: Partial<Booking>): Promise<BookingDetails> {
+    async updateBooking(id: number, updateData: any): Promise<BookingDetails> {
         const connection = await this.db.getConnection();
         try {
             await connection.beginTransaction();
@@ -328,6 +332,35 @@ export class BookingService {
             await connection.commit();
             return this.getBookingDetails(params.bookingId);
 
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    async updateBookingRoomStatus(roomBookingId: number, status: 'pending' | 'confirmed' | 'cancelled' | 'in_use' | 'completed'): Promise<void> {
+        const connection = await this.db.getConnection();
+        try {
+            await connection.beginTransaction();
+            
+            let updateSql = 'UPDATE booking_rooms SET status = ?';
+            const updateValues = [status, roomBookingId];
+
+            // If confirming a room, set its payment_status to unpaid if it's not already paid
+            if (status === 'confirmed') {
+                updateSql += ', payment_status = CASE WHEN payment_status = \'paid\' THEN \'paid\' ELSE \'unpaid\' END';
+            }
+            
+            updateSql += ' WHERE id = ?';
+            console.log('Executing SQL for booking room status update:', updateSql, updateValues);
+
+            await connection.execute(
+                updateSql,
+                updateValues
+            );
+            await connection.commit();
         } catch (error) {
             await connection.rollback();
             throw error;

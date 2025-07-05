@@ -64,7 +64,13 @@ export interface BookingRoom {
   id?: number;
   booking_id?: number;
   room_id: number;
+  room_name?: string;
+  room_type?: string;
+  start_time: string;
+  end_time: string;
   price_per_hour: number;
+  status: 'pending' | 'completed' | 'cancelled' | 'confirmed';
+  payment_status: 'unpaid' | 'partially_paid' | 'paid';
   room?: Room; // Thông tin chi tiết phòng
 }
 
@@ -130,19 +136,14 @@ export interface MultipleBookingResponse {
 
 //room services
 export interface Room {
-    id?: number;  // Optional for creation, required when returned from API,
+    id?: number;  // Optional for creation, required when returned from API
     name: string;
     type: string;
     price_per_hour: number;
     capacity: number;
-    description?: string;
-    created_at?: Date;
-    updated_at?: Date;
 }
 
-export type RoomFormData = Omit<Room, 'id' | 'created_at' | 'updated_at'>;
-
-export type RoomStatus = 'available' | 'occupied' | 'maintenance';
+export type RoomFormData = Omit<Room, 'id'>;
 
 
 
@@ -196,6 +197,7 @@ export interface UnpaidBooking {
     price_per_hour: number;
     hours: number;
     subtotal: number;
+    booking_room_status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   }[];
 }
 
@@ -240,7 +242,6 @@ export interface PaymentHistory {
   amount: number;
   payment_method: string;
   payment_date: string;
-  status: string;
   notes?: string;
   receipt_number: string;
   created_at: string;

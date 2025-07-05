@@ -3,6 +3,7 @@ import CustomerService from '../services/customerService';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { User } from '../models/Customer';
 
 // // Add custom error types
 // class ApplicationError extends Error {
@@ -70,7 +71,7 @@ class CustomerController {
             // Hash password
             const hashedPassword = await bcrypt.hash(password, 10);
 
-            // Create customer
+            // Create customer (User for authentication)
             const customer = await this.customerService.createCustomer({
                 username,
                 password: hashedPassword,
@@ -78,7 +79,7 @@ class CustomerController {
                 email,
                 phone_number,
                 role: 'user'
-            });
+            } as any);
 
             // Generate token
             const token = this.generateToken(customer);
@@ -112,7 +113,7 @@ class CustomerController {
                     message: 'Username and password are required'
                 });
             }
-            
+
             const customer = await this.customerService.getCustomerByUsername(username);
             if (!customer) {
                 return res.status(401).json({
@@ -121,7 +122,7 @@ class CustomerController {
                 });
             }
 
-            const isValidPassword = await bcrypt.compare(password, customer.password);
+            const isValidPassword = await bcrypt.compare(password, (customer as any).password);
             if (!isValidPassword) {
                 return res.status(401).json({
                     success: false,
@@ -174,10 +175,10 @@ class CustomerController {
         try {
             console.log('Update Profile - User ID:', req.user?.id);
             console.log('Update Profile - Request Body:', req.body);
-            
+
             const customer = await this.customerService.updateCustomer(req.user!.id, req.body);
             console.log('Update Profile - Updated Customer:', customer);
-            
+
             res.json({
                 success: true,
                 data: this.sanitizeCustomer(customer)
@@ -214,7 +215,7 @@ class CustomerController {
             delete updateData.role;
 
             const customer = await this.customerService.updateCustomer(customerId, updateData);
-            
+
             res.json({
                 success: true,
                 data: this.sanitizeCustomer(customer)
@@ -303,14 +304,14 @@ class CustomerController {
     async changePassword(req: AuthRequest, res: Response) {
         try {
             const { currentPassword, newPassword } = req.body;
-            
+
             if (!currentPassword || !newPassword) {
                 return res.status(400).json({
                     success: false,
                     message: 'Current password and new password are required'
                 });
             }
-            
+
             // Validate password length
             if (newPassword.length < 6) {
                 return res.status(400).json({
@@ -318,25 +319,25 @@ class CustomerController {
                     message: 'New password must be at least 6 characters long'
                 });
             }
-            
+
             // Get current user
             const customer = await this.customerService.getCustomerById(req.user!.id);
-            
+
             // Verify current password
-            const isPasswordValid = await bcrypt.compare(currentPassword, customer.password);
+            const isPasswordValid = await bcrypt.compare(currentPassword, (customer as any).password);
             if (!isPasswordValid) {
                 return res.status(401).json({
                     success: false,
                     message: 'Current password is incorrect'
                 });
             }
-            
+
             // Hash new password
             const hashedPassword = await bcrypt.hash(newPassword, 10);
-            
+
             // Update password
             await this.customerService.updatePassword(req.user!.id, hashedPassword);
-            
+
             res.json({
                 success: true,
                 message: 'Password changed successfully'
@@ -352,10 +353,10 @@ class CustomerController {
 
     private generateToken(customer: any): string {
         return jwt.sign(
-            { 
-                id: customer.id, 
-                username: customer.username, 
-                role: customer.role 
+            {
+                id: customer.id,
+                username: customer.username,
+                role: customer.role
             },
             process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '24h' }

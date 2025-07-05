@@ -276,12 +276,6 @@ const BookingCart: React.FC = () => {
                   </Grid>
                 </Grid>
 
-                {item.notes && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    Ghi chú: {item.notes}
-                  </Typography>
-                )}
-
                 <Box display="flex" justifyContent="flex-end" gap={1} sx={{ mt: 2 }}>
                   <IconButton
                     size="small"

@@ -42,7 +42,6 @@ export interface BookingRoom {
     check_in_time?: Date;
     check_out_time?: Date;
     price_per_hour: number;
-    amount: number;
     status: BookingRoomStatus;
     notes?: string;
     created_at?: Date;

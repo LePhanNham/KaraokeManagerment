@@ -416,6 +416,33 @@ export class BookingController {
             });
         }
     }
+
+    async confirmBooking(req: Request, res: Response) {
+        try {
+            const bookingId = parseInt(req.params.id);
+            if (isNaN(bookingId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID đặt phòng không hợp lệ'
+                });
+            }
+
+            const updatedBooking = await this.bookingService.updateBooking(bookingId, { status: 'confirmed' });
+
+            return res.json({
+                success: true,
+                message: 'Xác nhận đặt phòng thành công',
+                data: updatedBooking
+            });
+        } catch (error) {
+            console.error('Error confirming booking:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Lỗi khi xác nhận đặt phòng',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
 }
 
 export default BookingController;

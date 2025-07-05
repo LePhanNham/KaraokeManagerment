@@ -51,6 +51,8 @@ CREATE TABLE booking_rooms (
     end_time DATETIME,    -- Thời gian kết thúc riêng cho phòng (nếu khác booking chính)
     check_in_time DATETIME,   -- Thời gian check-in thực tế
     check_out_time DATETIME,  -- Thời gian check-out thực tế
+    status ENUM('pending', 'in_use', 'completed', 'cancelled') DEFAULT 'pending',  -- Trạng thái sử dụng
+    payment_status ENUM('unpaid', 'partially_paid', 'paid') DEFAULT 'unpaid',  -- Trạng thái thanh toán
     notes TEXT,           -- Ghi chú riêng cho phòng này
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -63,10 +65,13 @@ CREATE TABLE payments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     booking_id INT,
     booking_room_id INT,
-    amount DECIMAL(10, 2) NOT NULL,
-    payment_method ENUM('cash', 'card', 'transfer') NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,    
+    payment_method ENUM('cash', 'card', 'transfer', 'e_wallet') NOT NULL,
     payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    transaction_id VARCHAR(100),  -- Mã giao dịch (cho thanh toán điện tử)
     notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (booking_id) REFERENCES bookings(id),
     FOREIGN KEY (booking_room_id) REFERENCES booking_rooms(id),
     CHECK (booking_id IS NOT NULL OR booking_room_id IS NOT NULL)
